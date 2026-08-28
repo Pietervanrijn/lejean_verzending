@@ -1,0 +1,7 @@
+node_modules/
+.env
+
+# Lokale statusbestanden (draaien alleen op de server, horen niet in git)
+print-status.json
+order-status.json
+verzend-count.json
