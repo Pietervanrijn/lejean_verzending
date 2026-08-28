@@ -1,7 +1,7 @@
 {
-    "name": "chill-bill",
+    "name": "lejean_verzending",
     "version": "1.0.0",
-    "description": "Lightspeed orders app - klaar voor verzending met DAGBEZORGING filter",
+    "description": "LJ Verzending - Lightspeed orders app voor het beheren en verzendklaar maken van bestellingen",
     "main": "server.js",
     "scripts": {
           "start": "node server.js"
