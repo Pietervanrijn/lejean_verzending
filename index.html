@@ -313,10 +313,21 @@ var n = parseInt(m[1], 10);
 return (n >= 1790 && n <= 1797) || (n >= 8881 && n <= 8899) || (n >= 9160 && n <= 9164) || n === 9166;
 }
 
+// Verzendmethodes met "PostNL" in de tekst zijn altijd PostNL, ongeacht hoofdletters/tijdslot.
+// PostNL heeft eigen (ruimere) bezorggebieden dan Chill-Bill/Trunkrs en bezorgt bijvoorbeeld gewoon
+// op de Waddeneilanden, dus deze mogen nooit als Trunkrs (of Chill-Bill-Wadden) worden aangemerkt.
+function isPostNLMethod(method) {
+if (!method) return false;
+return /postnl/i.test(method);
+}
+
 // Verzendmethodes met een woord volledig in HOOFDLETTERS (zoals DAGBEZORGING) worden op dit moment
 // door Chill-Bill vervoerd. Methodes zonder zo'n woord en met een avond-tijdslot zijn Trunkrs-avondleveringen.
+// PostNL-methodes worden altijd eerst uitgesloten: "Postnl" bevat zelf geen HOOFDLETTERS-reeks en zou
+// anders, bij een tijdstip vanaf 17:00, onterecht als Trunkrs worden herkend.
 function isTrunkrsMethod(method) {
 if (!method) return false;
+if (isPostNLMethod(method)) return false;
 if (/[A-Z]{2,}/.test(method)) return false;
 var m = method.match(/(\d{1,2}):(\d{2})/);
 if (!m) return false;
