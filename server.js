@@ -43,7 +43,7 @@ app.use((req, res, next) => {
       return next();
     }
   }
-  res.set('WWW-Authenticate', 'Basic realm="LeJean"');
+  res.set('WWW-Authenticate', 'Basic realm="LJ Verzending"');
   return res.status(401).send('Inloggen vereist.');
 });
 // -------------------------------------------------------------------------
@@ -245,4 +245,4 @@ saveVerzendCounts(verzendCountStore);
 res.json({ ok: true, count: current });
 });
 
-app.listen(PORT, () => console.log('LeJean running on port ' + PORT));
+app.listen(PORT, () => console.log('LJ Verzending running on port ' + PORT));
