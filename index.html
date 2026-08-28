@@ -112,7 +112,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="stats-labels">
 <span class="stats-title" id="statsTitle">Orders klaar voor verzending</span>
 <div id="statsBadges">
-<span class="badge badge-green">&#x1F69A; DAGBEZORGING</span>
+<span class="badge badge-green">&#x1F69A; Alle verzendmethodes</span>
 <span class="badge badge-blue" style="margin-left:6px">Klaar voor verzending</span>
 </div>
 </div>
@@ -127,7 +127,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="print-dropdown-item active" data-mode="pakbon" onclick="setPrintMode('pakbon')"><span>Pakbonnen</span><span class="pdi-check">&#10003;</span></div>
 </div>
 </div> <select class="filter-select" id="methodFilter" onchange="applyFilter()">
-<option value="">Alle DAGBEZORGING methodes (0)</option>
+<option value="">Alle verzendmethodes</option>
 </select>
 <select class="filter-select" id="printFilter" onchange="applyFilter()">
 <option value="">Alle (geprinte doc)</option>
@@ -293,7 +293,7 @@ var klant = o._klant || [o.firstname, o.middlename, o.lastname].filter(Boolean).
 var ordNummer = o._ordNummer || o.number || String(o.id) || '-';
 var total = o.priceIncl ? String.fromCharCode(8364) + ' ' + parseFloat(o.priceIncl).toFixed(2).replace('.',',') : '-';
 var date = o.createdAt ? new Date(o.createdAt).toLocaleDateString('nl-NL', {day:'2-digit',month:'2-digit',year:'numeric'}) : '-';
-var ship = o._shippingMethod || 'DAGBEZORGING';
+var ship = o._shippingMethod || 'Onbekend';
 var shipPostcode = o.addressShippingZipcode || o.addressBillingZipcode || '';
 var waddenWarning = (ship.indexOf('DAGBEZORGING') === 0 && isWaddenPostcode(shipPostcode));
 var email = o.email || (o.billingAddress && o.billingAddress.email) || '';
