@@ -313,6 +313,58 @@ var n = parseInt(m[1], 10);
 return (n >= 1790 && n <= 1797) || (n >= 8881 && n <= 8899) || (n >= 9160 && n <= 9164) || n === 9166;
 }
 
+// Verzendmethodes met "PostNL" in de tekst zijn altijd PostNL, ongeacht hoofdletters/tijdslot.
+// PostNL heeft eigen (ruimere) bezorggebieden dan Chill-Bill/Trunkrs en bezorgt bijvoorbeeld gewoon
+// op de Waddeneilanden, dus deze mogen nooit als Trunkrs (of Chill-Bill-Wadden) worden aangemerkt.
+function isPostNLMethod(method) {
+if (!method) return false;
+return /postnl/i.test(method);
+}
+
+// Verzendmethodes met een woord volledig in HOOFDLETTERS (zoals DAGBEZORGING) worden op dit moment
+// door Chill-Bill vervoerd. Methodes zonder zo'n woord en met een avond-tijdslot zijn Trunkrs-avondleveringen.
+// PostNL-methodes worden altijd eerst uitgesloten: "Postnl" bevat zelf geen HOOFDLETTERS-reeks en zou
+// anders, bij een tijdstip vanaf 17:00, onterecht als Trunkrs worden herkend.
+function isTrunkrsMethod(method) {
+if (!method) return false;
+if (isPostNLMethod(method)) return false;
+if (/[A-Z]{2,}/.test(method)) return false;
+var m = method.match(/(\d{1,2}):(\d{2})/);
+if (!m) return false;
+return parseInt(m[1], 10) >= 17;
+}
+
+// Postcode-prefixes (eerste 3 cijfers) in Vlaanderen waar Trunkrs niet kan bezorgen.
+var BE_TRUNKRS_EXCLUDED_PREFIXES = ['843','862','860','865','867','866','863','869','864','897','895','851','855','858','969','960','968','966','154','157','167','175','340','332','337','336','305','304','156','164','387','389','379'];
+
+function isExcludedBelgianPostcode(pc) {
+if (!pc) return false;
+var m = String(pc).trim().match(/^(\d{4})/);
+if (!m) return false;
+var n = parseInt(m[1], 10);
+var prefix3 = m[1].slice(0, 3);
+if (BE_TRUNKRS_EXCLUDED_PREFIXES.indexOf(prefix3) !== -1) return true;
+// Volledig Waalse gewest (Waals-Brabant, Luik, Namen, Henegouwen, Luxemburg): geen Trunkrs-bezorging.
+if (n >= 1300 && n <= 1499) return true;
+if (n >= 4000 && n <= 7999) return true;
+return false;
+}
+
+// Geeft een waarschuwingsbadge terug als deze order via Trunkrs verstuurd zou worden naar een
+// postcode waar Trunkrs niet bezorgt (Waddeneilanden, Wallonie of de uitgesloten Vlaamse lijst).
+// Geldt uitdrukkelijk alleen voor Trunkrs-methodes, niet voor PostNL/DAGBEZORGING/overige vervoerders.
+function getTrunkrsExclusionBadge(shipMethod, countryCode, postcode) {
+if (!isTrunkrsMethod(shipMethod)) return null;
+var cc = (countryCode || '').toUpperCase();
+if (cc === 'NL' && isWaddenPostcode(postcode)) {
+return { label: 'Waddeneilanden', title: 'Postcode ligt op de Waddeneilanden: Trunkrs-avondlevering is hier niet mogelijk' };
+}
+if (cc === 'BE' && isExcludedBelgianPostcode(postcode)) {
+return { label: 'Niet leverbaar (BE)', title: 'Deze postcode (Wallonie of een uitgesloten regio in Vlaanderen) kan niet via Trunkrs bezorgd worden' };
+}
+return null;
+}
+
 function getFlagEmoji(countryCode) {
 if (!countryCode) return '';
 var cc = countryCode.toUpperCase();
@@ -354,7 +406,13 @@ var total = o.priceIncl ? String.fromCharCode(8364) + ' ' + parseFloat(o.priceIn
 var date = o.createdAt ? new Date(o.createdAt).toLocaleDateString('nl-NL', {day:'2-digit',month:'2-digit',year:'numeric'}) : '-';
 var ship = o._shippingMethod || 'Onbekend';
 var shipPostcode = o.addressShippingZipcode || o.addressBillingZipcode || '';
+var shipCountryCode = ((o.addressShippingCountry && (o.addressShippingCountry.code || o.addressShippingCountry.code3)) || (o.addressBillingCountry && (o.addressBillingCountry.code || o.addressBillingCountry.code3)) || '').toUpperCase();
 var waddenWarning = (ship.indexOf('DAGBEZORGING') === 0 && isWaddenPostcode(shipPostcode));
+var trunkrsExclusion = getTrunkrsExclusionBadge(ship, shipCountryCode, shipPostcode);
+var hasShipWarning = waddenWarning || !!trunkrsExclusion;
+var shipWarningBadgeHtml = waddenWarning
+? '<span class="wadden-badge" title="Postcode ligt op de Waddeneilanden: DAGBEZORGING is hier niet mogelijk">Waddeneilanden</span>'
+: (trunkrsExclusion ? '<span class="wadden-badge" title="' + escapeHtml(trunkrsExclusion.title) + '">' + escapeHtml(trunkrsExclusion.label) + '</span>' : '');
 var email = o.email || (o.billingAddress && o.billingAddress.email) || '';
 var postcode = o.addressBillingZipcode || '';
 var city = o.addressBillingCity || '';
@@ -379,7 +437,7 @@ var adresSafe = escapeHtml([[postcode,city].filter(Boolean).join(', '), countryC
 
 var printBadge = '<button type="button" class="geprint-badge geprint-' + printStatus + '" onclick="toggleBeide(\'' + ordNummerSafe + '\',\'' + printStatus + '\')" title="Klik om te wisselen tussen Enkel pakbon en Beide geprint">' + printLabel + '</button>';
 
-return '<tr><td><input type="checkbox" class="order-checkbox" data-id="' + idSafe + '" data-num="' + ordNummerSafe + '" onchange="updateSelection()"></td><td><div class="shop-status-icon">&#10003;</div></td><td><span class="status-text">Wacht op verzending</span></td><td><a class="order-num-link" href="#">' + ordNummerSafe + '</a><div class="order-date">' + dateSafe + '</div></td><td><div class="' + (waddenWarning ? "ship-method-wrap ship-wadden-warning" : "ship-method-wrap") + '"><div class="ship-icon">' + (waddenWarning ? "&#9888;" : "&#x1F69A;") + '</div><span class="ship-name">' + shipSafe + '</span>' + (waddenWarning ? '<span class="wadden-badge" title="Postcode ligt op de Waddeneilanden: DAGBEZORGING is hier niet mogelijk">Waddeneilanden</span>' : '') + '</div></td><td><div class="inhoud-items">' + itemLabel + '</div>' + (qtyText ? '<div class="inhoud-detail">' + qtyText + '</div>' : '') + (valText ? '<div class="inhoud-detail">' + valText + '</div>' : '') + '</td><td><div class="klant-naam">' + (flag ? flag : '') + klantSafe + '</div>' + (email ? '<div class="klant-email">' + emailSafe + '</div>' : '') + ((postcode||city||countryCode) ? '<div class="klant-adres">' + adresSafe + '</div>' : '') + '</td><td>' + printBadge + '</td></tr>';
+return '<tr><td><input type="checkbox" class="order-checkbox" data-id="' + idSafe + '" data-num="' + ordNummerSafe + '" onchange="updateSelection()"></td><td><div class="shop-status-icon">&#10003;</div></td><td><span class="status-text">Wacht op verzending</span></td><td><a class="order-num-link" href="#">' + ordNummerSafe + '</a><div class="order-date">' + dateSafe + '</div></td><td><div class="' + (hasShipWarning ? "ship-method-wrap ship-wadden-warning" : "ship-method-wrap") + '"><div class="ship-icon">' + (hasShipWarning ? "&#9888;" : "&#x1F69A;") + '</div><span class="ship-name">' + shipSafe + '</span>' + shipWarningBadgeHtml + '</div></td><td><div class="inhoud-items">' + itemLabel + '</div>' + (qtyText ? '<div class="inhoud-detail">' + qtyText + '</div>' : '') + (valText ? '<div class="inhoud-detail">' + valText + '</div>' : '') + '</td><td><div class="klant-naam">' + (flag ? flag : '') + klantSafe + '</div>' + (email ? '<div class="klant-email">' + emailSafe + '</div>' : '') + ((postcode||city||countryCode) ? '<div class="klant-adres">' + adresSafe + '</div>' : '') + '</td><td>' + printBadge + '</td></tr>';
 }).join('');
 c.innerHTML = '<div class="orders-table-wrap"><table class="orders-table"><thead><tr><th><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onchange="toggleSelectAll(this)" title="Alles selecteren"></th><th>SHOP STATUS</th><th>STATUS</th><th>ORDER</th><th>VERZENDMETHODE</th><th>INHOUD VAN DE BESTELLING</th><th>KLANT</th><th>GEPRINT</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
