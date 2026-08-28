@@ -136,16 +136,16 @@ return { itemCount: null, quantityOrdered: null };
 }
 
 async function enrichOrders(orders) {
-const dagOrders = orders.filter(o => {
-  const s = JSON.stringify(o).toUpperCase();
-  return s.includes('DAGBEZORGING') || s.includes('AFHALEN BIJ LEJEAN') || !!o.shipmentIsPickup;
-});
-const enriched = await mapWithConcurrency(dagOrders, 5, async (order) => {
+// Voorheen werd hier gefilterd op alleen DAGBEZORGING/afhaal-orders. De tool
+// (nu LJ Verzending) dekt inmiddels alle verzendmethodes, dus alle orders
+// met status "klaar voor verzending"/"klaar voor afhalen" worden verrijkt
+// en getoond; de verzendmethode zelf blijft gewoon zichtbaar per order.
+const enriched = await mapWithConcurrency(orders, 5, async (order) => {
 const firstName = order.firstname || '';
 const middleName = order.middlename || '';
 const lastName = order.lastname || '';
 const klant = [firstName, middleName, lastName].filter(Boolean).join(' ') || order.email || 'Onbekend';
-let shippingMethod = order.shipmentTitle || order.shippingMethod || 'DAGBEZORGING';
+let shippingMethod = order.shipmentTitle || order.shippingMethod || 'Onbekend';
 const orderStr = JSON.stringify(order);
 const dagMatch = orderStr.match(/"([^"]*[Dd][Aa][Gg][Bb][Ee][Zz][Oo][Rr][Gg][Ii][Nn][Gg][^"]*)"/);
 if (dagMatch) shippingMethod = dagMatch[1];
