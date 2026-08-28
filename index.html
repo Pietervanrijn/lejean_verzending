@@ -182,7 +182,7 @@ if (!res.ok) throw new Error('Server error: ' + res.status);
 var data = await res.json();
 allOrders = data.orders || [];
 allOrders.sort(function(a, b) { var na = parseFloat(a._ordNummer || a.number || a.id || 0); var nb = parseFloat(b._ordNummer || b.number || b.id || 0); if (!isNaN(na) && !isNaN(nb)) return nb - na; return String(b._ordNummer || b.number || b.id || '').localeCompare(String(a._ordNummer || a.number || a.id || '')); });
-allMethods = data.shippingMethods || [];
+allMethods = computeSortedMethods(allOrders);
 populateFilter(allMethods);
 applyFilter();
 document.getElementById('updated').textContent = 'Bijgewerkt: ' + new Date().toLocaleTimeString('nl-NL');
@@ -194,6 +194,28 @@ document.getElementById('count').textContent = '!';
 btn.disabled = false;
 btn.innerHTML = '<span>&#8635;</span> Vernieuwen';
 }
+}
+
+// Sorteert de verzendmethodes op urgentie: de methode met de oudste nog
+// openstaande order (nog niet verzonden/geannuleerd) staat bovenaan, zodat
+// je bovenaan meteen ziet welke verzendmethode het eerst verzonden moet
+// worden. Methodes zonder openstaande orders komen achteraan (alfabetisch).
+function computeSortedMethods(orders) {
+var oldestOpen = {};
+var seen = {};
+orders.forEach(function(o) {
+var m = o._shippingMethod;
+if (!m) return;
+seen[m] = true;
+var status = o._orderStatus || 'inkomend';
+if (status !== 'inkomend' && status !== 'label') return;
+var t = o.createdAt ? new Date(o.createdAt).getTime() : NaN;
+if (isNaN(t)) return;
+if (!(m in oldestOpen) || t < oldestOpen[m]) oldestOpen[m] = t;
+});
+var withOpenOrders = Object.keys(oldestOpen).sort(function(a, b) { return oldestOpen[a] - oldestOpen[b]; });
+var withoutOpenOrders = Object.keys(seen).filter(function(m) { return !(m in oldestOpen); }).sort();
+return withOpenOrders.concat(withoutOpenOrders);
 }
 
 function populateFilter(methods) {
