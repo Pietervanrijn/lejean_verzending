@@ -20,17 +20,10 @@ const trunkrsHeaders = () => ({ 'x-api-key': TRUNKRS_API_KEY, 'Content-Type': 'a
 // --- Pack & Go: aparte PIN-beveiliging (wie heeft een label geprint?) ----
 // Op verzoek van Pieter (2026-08-29): geen volledige gebruikersaccounts,
 // alleen een lichte PIN-check specifiek voor het Pack & Go-scherm, zodat
-// duidelijk is wie een label heeft aangemaakt/geprint. Configuratie via
-// Railway env var PACKGO_MEDEWERKERS, formaat "Naam1:1234,Naam2:5678" -
-// nooit in code/git, net als de andere secrets in deze app.
-const PACKGO_MEDEWERKERS = {};
-(process.env.PACKGO_MEDEWERKERS || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean).forEach(function(pair) {
-const idx = pair.indexOf(':');
-if (idx === -1) return;
-const naam = pair.slice(0, idx).trim();
-const pin = pair.slice(idx + 1).trim();
-if (naam && pin) PACKGO_MEDEWERKERS[pin] = naam;
-});
+// duidelijk is wie een label heeft aangemaakt/geprint. Medewerkers (naam +
+// PIN) worden beheerd via het instellingenpaneel in de app zelf (rechter
+// zijbalk, tandwiel-icoon) en persistent opgeslagen op DATA_DIR — zie
+// packgoMedewerkersStore verderop, samen met de andere status-bestanden.
 
 // --- Toegangsbeveiliging -----------------------------------------------
 // Deze app toonde tot nu toe klantgegevens en liet acties (o.a. het
@@ -130,6 +123,32 @@ function saveOrderIdMap(data) {
 try { fs.writeFileSync(ORDER_ID_MAP_FILE, JSON.stringify(data)); } catch(e) { console.error('saveOrderIdMap error:', e.message); }
 }
 let orderIdMapStore = loadOrderIdMap();
+
+// Medewerkers (naam -> PIN) voor de Pack & Go PIN-check, beheerd via het
+// instellingenpaneel (rechter zijbalk) i.p.v. een Railway env var die elke
+// keer handmatig aangepast moet worden. Backwards compatible: als er nog
+// geen opgeslagen medewerkers zijn maar wel een (oudere) Railway env var
+// PACKGO_MEDEWERKERS staat ingesteld ("Naam1:1234,Naam2:5678"), wordt die
+// eenmalig ingelezen als startpunt en meteen weggeschreven naar het bestand.
+const PACKGO_MEDEWERKERS_FILE = DATA_DIR + '/packgo-medewerkers.json';
+function loadPackgoMedewerkers() {
+  try { return JSON.parse(fs.readFileSync(PACKGO_MEDEWERKERS_FILE, 'utf8')); } catch(e) { return null; }
+}
+function savePackgoMedewerkers(data) {
+  try { fs.writeFileSync(PACKGO_MEDEWERKERS_FILE, JSON.stringify(data)); } catch(e) { console.error('savePackgoMedewerkers error:', e.message); }
+}
+let packgoMedewerkersStore = loadPackgoMedewerkers();
+if (!packgoMedewerkersStore) {
+  packgoMedewerkersStore = {};
+  (process.env.PACKGO_MEDEWERKERS || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean).forEach(function(pair) {
+    const idx = pair.indexOf(':');
+    if (idx === -1) return;
+    const naam = pair.slice(0, idx).trim();
+    const pin = pair.slice(idx + 1).trim();
+    if (naam && pin) packgoMedewerkersStore[naam] = pin;
+  });
+  savePackgoMedewerkers(packgoMedewerkersStore);
+}
 
 // Voert fn uit over items met maximaal `limit` gelijktijdige API-calls,
 // in plaats van alles in één keer (voorkomt rate-limit fouten bij Lightspeed
@@ -504,14 +523,52 @@ app.get('/api/trunkrs/labels', (req, res) => {
 res.json({ labels: trunkrsLabelsStore });
 });
 
-// PIN-check voor het Pack & Go-scherm (zie PACKGO_MEDEWERKERS hierboven).
+// PIN-check voor het Pack & Go-scherm (zie packgoMedewerkersStore hierboven).
 // Geeft alleen de naam terug bij een geldige PIN, nooit de lijst van
 // PIN's/namen zelf - de client kent alleen het resultaat van 1 invoer.
 app.post('/api/packgo/login', (req, res) => {
 const { pin } = req.body || {};
-const naam = pin != null ? PACKGO_MEDEWERKERS[String(pin).trim()] : null;
+const pinTrimmed = pin != null ? String(pin).trim() : '';
+let naam = null;
+if (pinTrimmed) {
+for (const key in packgoMedewerkersStore) {
+if (packgoMedewerkersStore[key] === pinTrimmed) { naam = key; break; }
+}
+}
 if (!naam) return res.status(401).json({ error: 'Onjuiste PIN' });
 res.json({ ok: true, naam: naam });
+});
+
+// --- Instellingenpaneel: Pack & Go-medewerkers beheren (rechter zijbalk) --
+// Zit achter dezelfde HTTP Basic Auth als de rest van de app - geen aparte
+// beveiliging nodig, net zoals klantgegevens elders in de app ook alleen
+// achter die ene inlog zitten.
+app.get('/api/settings/packgo-medewerkers', (req, res) => {
+const medewerkers = Object.keys(packgoMedewerkersStore).sort(function(a, b) { return a.localeCompare(b); }).map(function(naam) {
+return { naam: naam, pin: packgoMedewerkersStore[naam] };
+});
+res.json({ medewerkers: medewerkers });
+});
+
+app.post('/api/settings/packgo-medewerkers', (req, res) => {
+const { naam, pin } = req.body || {};
+const naamTrimmed = naam != null ? String(naam).trim() : '';
+const pinTrimmed = pin != null ? String(pin).trim() : '';
+if (!naamTrimmed || !pinTrimmed) return res.status(400).json({ error: 'Naam en PIN zijn verplicht.' });
+if (!/^[0-9]{4,6}$/.test(pinTrimmed)) return res.status(400).json({ error: 'PIN moet 4 tot 6 cijfers zijn.' });
+const dubbeleNaam = Object.keys(packgoMedewerkersStore).find(function(k) { return k !== naamTrimmed && packgoMedewerkersStore[k] === pinTrimmed; });
+if (dubbeleNaam) return res.status(409).json({ error: 'Deze PIN is al in gebruik door ' + dubbeleNaam + '.' });
+packgoMedewerkersStore[naamTrimmed] = pinTrimmed;
+savePackgoMedewerkers(packgoMedewerkersStore);
+res.json({ ok: true });
+});
+
+app.delete('/api/settings/packgo-medewerkers/:naam', (req, res) => {
+const naam = decodeURIComponent(req.params.naam);
+if (!packgoMedewerkersStore[naam]) return res.status(404).json({ error: 'Medewerker niet gevonden.' });
+delete packgoMedewerkersStore[naam];
+savePackgoMedewerkers(packgoMedewerkersStore);
+res.json({ ok: true });
 });
 
 // Legt vast wie een label heeft geprint (voor de "Geprint door"-kolom).
