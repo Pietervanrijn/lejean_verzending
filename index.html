@@ -168,6 +168,33 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .packgo-session-bar b{color:#33401f}
 .packgo-switch-link{color:#1565c0;background:none;border:none;cursor:pointer;font-size:13px;font-weight:600;padding:0}
 .packgo-switch-link:hover{text-decoration:underline}
+.settings-gear-btn{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.4);width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.settings-gear-btn:hover{background:rgba(255,255,255,.15);border-color:#fff}
+.settings-drawer-overlay{display:none;position:fixed;inset:0;background:rgba(20,20,15,.4);z-index:150}
+.settings-drawer-overlay.open{display:block}
+.settings-drawer{position:fixed;top:0;right:0;height:100%;width:min(400px,92vw);background:#fff;box-shadow:-6px 0 30px rgba(0,0,0,.25);z-index:160;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column}
+.settings-drawer.open{transform:translateX(0)}
+.settings-drawer-head{display:flex;align-items:center;justify-content:space-between;padding:22px 24px;background:linear-gradient(135deg,#33401f,#24301a);color:#fff;flex-shrink:0}
+.settings-drawer-head h3{font-size:17px;font-weight:700}
+.settings-drawer-close{background:transparent;border:none;color:#fff;font-size:24px;cursor:pointer;line-height:1;padding:0 4px}
+.settings-drawer-close:hover{opacity:.7}
+.settings-drawer-body{padding:22px 24px;overflow-y:auto;flex:1}
+.settings-section{margin-bottom:28px}
+.settings-section h4{font-size:12px;font-weight:700;color:#f0821e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.settings-hint{font-size:12.5px;color:#888;margin-bottom:14px;line-height:1.5}
+.medewerker-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #f6f5f0}
+.medewerker-naam{flex:1;font-size:13.5px;font-weight:600;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.medewerker-pin{font-family:monospace;font-size:13px;color:#666;letter-spacing:1px;min-width:56px}
+.medewerker-pin-toggle{background:transparent;border:none;cursor:pointer;font-size:14px;padding:2px 4px;opacity:.6}
+.medewerker-pin-toggle:hover{opacity:1}
+.medewerker-edit-btn,.medewerker-delete-btn{background:transparent;border:1.5px solid #ddd;border-radius:14px;padding:4px 10px;font-size:11.5px;font-weight:600;color:#555;cursor:pointer;white-space:nowrap}
+.medewerker-edit-btn:hover{border-color:#33401f;color:#33401f}
+.medewerker-delete-btn:hover{border-color:#c62828;color:#c62828}
+.medewerker-add-row{display:flex;gap:8px;margin-top:14px}
+.medewerker-add-row input{flex:1;font-size:13px;padding:9px 12px;border-radius:8px;border:1.5px solid #e0e0e0;outline:none;font-family:inherit;min-width:0}
+.medewerker-add-row input:focus{border-color:#f0821e}
+.medewerker-add-actions{display:flex;gap:8px;margin-top:10px}
+.settings-section-placeholder{opacity:.6}
 </style>
 </head>
 <body>
@@ -178,6 +205,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <button class="refresh-btn" id="refreshBtn" onclick="loadOrders()">
 <span>&#8635;</span> Vernieuwen
 </button>
+<button type="button" class="settings-gear-btn" id="settingsGearBtn" onclick="openSettingsDrawer()" title="Instellingen" aria-label="Instellingen">&#9881;</button>
 </div>
 </div>
 <div class="container">
@@ -278,6 +306,33 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="modal-actions" id="labelDetailActions"></div>
 </div>
 <div id="labelDetailBody"></div>
+</div>
+</div>
+<div class="settings-drawer-overlay" id="settingsDrawerOverlay" onclick="closeSettingsDrawer()"></div>
+<div class="settings-drawer" id="settingsDrawer">
+<div class="settings-drawer-head">
+<h3>Instellingen</h3>
+<button type="button" class="settings-drawer-close" onclick="closeSettingsDrawer()" aria-label="Sluiten">&times;</button>
+</div>
+<div class="settings-drawer-body">
+<div class="settings-section">
+<h4>Pack &amp; Go &ndash; medewerkers</h4>
+<p class="settings-hint">Naam + PIN per medewerker die labels mag printen. Wordt gebruikt voor de kolom "Geprint door" bij Gecreëerde labels.</p>
+<div id="medewerkerList"></div>
+<div class="medewerker-add-row">
+<input type="text" id="nieuweMedewerkerNaam" placeholder="Naam" autocomplete="off">
+<input type="text" id="nieuweMedewerkerPin" placeholder="PIN (4-6 cijfers)" inputmode="numeric" autocomplete="off">
+</div>
+<div class="medewerker-add-actions">
+<button type="button" class="modal-btn modal-btn-primary" id="medewerkerAddBtn" onclick="addMedewerker()">Toevoegen</button>
+<button type="button" class="modal-back" id="medewerkerCancelEditBtn" style="display:none" onclick="cancelMedewerkerEdit()">Annuleer</button>
+</div>
+<div id="medewerkerError" class="packgo-login-error"></div>
+</div>
+<div class="settings-section settings-section-placeholder">
+<h4>Meer instellingen</h4>
+<p class="settings-hint">Extra opties (zoals afdrukvoorkeuren) komen hier later bij.</p>
+</div>
 </div>
 </div>
 </div>
@@ -1054,6 +1109,113 @@ errorEl.textContent = 'Kon niet inloggen: ' + e.message;
 function packGoLogout() {
 clearPackGoNaam();
 updatePackGoGateVisibility();
+}
+
+// --- Instellingenpaneel (rechter zijbalk): Pack & Go-medewerkers beheren --
+var settingsMedewerkers = [];
+var medewerkerEditingNaam = null;
+
+function openSettingsDrawer() {
+document.getElementById('settingsDrawerOverlay').classList.add('open');
+document.getElementById('settingsDrawer').classList.add('open');
+loadMedewerkers();
+}
+
+function closeSettingsDrawer() {
+document.getElementById('settingsDrawerOverlay').classList.remove('open');
+document.getElementById('settingsDrawer').classList.remove('open');
+cancelMedewerkerEdit();
+}
+
+function loadMedewerkers() {
+var box = document.getElementById('medewerkerList');
+fetch('/api/settings/packgo-medewerkers').then(function(r) { return r.json(); }).then(function(data) {
+settingsMedewerkers = data.medewerkers || [];
+renderMedewerkerList();
+}).catch(function() {
+box.innerHTML = '<div class="settings-hint">Kon medewerkers niet laden.</div>';
+});
+}
+
+function renderMedewerkerList() {
+var box = document.getElementById('medewerkerList');
+if (!settingsMedewerkers.length) { box.innerHTML = '<div class="settings-hint">Nog geen medewerkers ingesteld.</div>'; return; }
+box.innerHTML = settingsMedewerkers.map(function(m) {
+var encNaam = encodeURIComponent(m.naam);
+return '<div class="medewerker-row">' +
+'<span class="medewerker-naam">' + escapeHtml(m.naam) + '</span>' +
+'<span class="medewerker-pin" data-pin="' + escapeHtml(m.pin) + '">&bull;&bull;&bull;&bull;</span>' +
+'<button type="button" class="medewerker-pin-toggle" onclick="toggleMedewerkerPin(this)" title="PIN tonen/verbergen">&#128065;</button>' +
+'<button type="button" class="medewerker-edit-btn" onclick="startMedewerkerEdit(\'' + encNaam + '\')">Wijzigen</button>' +
+'<button type="button" class="medewerker-delete-btn" onclick="deleteMedewerker(\'' + encNaam + '\')">Verwijderen</button>' +
+'</div>';
+}).join('');
+}
+
+function toggleMedewerkerPin(btn) {
+var span = btn.previousElementSibling;
+if (!span) return;
+if (span.textContent.indexOf('•') !== -1) { span.textContent = span.getAttribute('data-pin'); }
+else { span.textContent = '••••'; }
+}
+
+function startMedewerkerEdit(encNaam) {
+var naam = decodeURIComponent(encNaam);
+var match = settingsMedewerkers.filter(function(x) { return x.naam === naam; });
+if (!match.length) return;
+medewerkerEditingNaam = naam;
+var naamInput = document.getElementById('nieuweMedewerkerNaam');
+var pinInput = document.getElementById('nieuweMedewerkerPin');
+naamInput.value = match[0].naam;
+naamInput.disabled = true;
+pinInput.value = match[0].pin;
+pinInput.focus();
+document.getElementById('medewerkerAddBtn').textContent = 'Opslaan';
+document.getElementById('medewerkerCancelEditBtn').style.display = 'inline-block';
+document.getElementById('medewerkerError').textContent = '';
+}
+
+function cancelMedewerkerEdit() {
+medewerkerEditingNaam = null;
+var naamInput = document.getElementById('nieuweMedewerkerNaam');
+var pinInput = document.getElementById('nieuweMedewerkerPin');
+if (naamInput) { naamInput.value = ''; naamInput.disabled = false; }
+if (pinInput) pinInput.value = '';
+var addBtn = document.getElementById('medewerkerAddBtn');
+var cancelBtn = document.getElementById('medewerkerCancelEditBtn');
+if (addBtn) addBtn.textContent = 'Toevoegen';
+if (cancelBtn) cancelBtn.style.display = 'none';
+var errEl = document.getElementById('medewerkerError');
+if (errEl) errEl.textContent = '';
+}
+
+function addMedewerker() {
+var naam = document.getElementById('nieuweMedewerkerNaam').value.trim();
+var pin = document.getElementById('nieuweMedewerkerPin').value.trim();
+var errBox = document.getElementById('medewerkerError');
+errBox.textContent = '';
+if (!naam || !pin) { errBox.textContent = 'Naam en PIN zijn verplicht.'; return; }
+if (!/^[0-9]{4,6}$/.test(pin)) { errBox.textContent = 'PIN moet 4 tot 6 cijfers zijn.'; return; }
+fetch('/api/settings/packgo-medewerkers', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ naam: naam, pin: pin }) })
+.then(function(r) { return r.json().then(function(data) { return { status: r.status, data: data }; }); })
+.then(function(res) {
+if (res.status !== 200) { errBox.textContent = (res.data && res.data.error) || 'Opslaan mislukt.'; return; }
+cancelMedewerkerEdit();
+loadMedewerkers();
+})
+.catch(function() { errBox.textContent = 'Opslaan mislukt (netwerkfout).'; });
+}
+
+function deleteMedewerker(encNaam) {
+var naam = decodeURIComponent(encNaam);
+if (!window.confirm('Medewerker "' + naam + '" verwijderen?')) return;
+fetch('/api/settings/packgo-medewerkers/' + encodeURIComponent(naam), { method: 'DELETE' })
+.then(function(r) { return r.json(); })
+.then(function() {
+if (medewerkerEditingNaam === naam) cancelMedewerkerEdit();
+loadMedewerkers();
+})
+.catch(function() { window.alert('Verwijderen mislukt.'); });
 }
 
 // Gebruikt vanaf overal in de app (Pack & Go zelf, maar ook de knoppen in
