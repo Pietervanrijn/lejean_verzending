@@ -609,6 +609,38 @@ res.status(500).json({ error: 'Label annuleren mislukt: ' + detail });
 }
 });
 
+// Haalt de actuele status (state.code) live op bij Trunkrs voor alle bekende
+// labels (behalve al geannuleerde) en werkt trunkrsLabelsStore bij. Bedoeld
+// voor de "STATUS"-kolom in "Gecreëerde labels" en "Verzonden" - Pieter wil
+// deze gevuld zien vanuit het Trunkrs-portaal i.p.v. een statische waarde.
+// Fase-2-webhooks (automatisch, zie project-notities) zijn nog niet gebouwd;
+// dit endpoint pollt op aanvraag (bv. bij het openen van een tabblad) i.p.v.
+// continu op de achtergrond, om binnen de Trunkrs-rate-limits te blijven.
+app.post('/api/trunkrs/refresh-statuses', async (req, res) => {
+if (!TRUNKRS_API_KEY) return res.status(503).json({ error: 'TRUNKRS_API_KEY is niet ingesteld (Railway env var).' });
+const keys = Object.keys(trunkrsLabelsStore).filter(function(k) {
+const entry = trunkrsLabelsStore[k];
+return entry && entry.trunkrsNr && !entry.cancelledAt;
+});
+try {
+await mapWithConcurrency(keys, 5, async function(key) {
+const entry = trunkrsLabelsStore[key];
+try {
+const r = await axios.get(TRUNKRS_BASE_URL + '/shipments/' + entry.trunkrsNr, { headers: trunkrsHeaders() });
+const data = (r.data && r.data.data) ? r.data.data : r.data;
+if (data && data.state) entry.state = data.state;
+} catch (e) {
+// 1 mislukte status-lookup mag de andere orders niet blokkeren.
+console.error('refresh-statuses: status ophalen mislukt voor ' + key + ':', e.response ? JSON.stringify(e.response.data) : e.message);
+}
+});
+saveTrunkrsLabels(trunkrsLabelsStore);
+res.json({ labels: trunkrsLabelsStore });
+} catch (e) {
+res.status(500).json({ error: 'Statussen ophalen mislukt: ' + e.message });
+}
+});
+
 app.post('/api/verzend-print-count', (req, res) => {
 const { shippingMethod } = req.body || {};
 if (!shippingMethod) return res.status(400).json({ error: 'shippingMethod verplicht' });

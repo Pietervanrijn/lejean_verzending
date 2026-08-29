@@ -76,6 +76,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .ship-icon{width:28px;height:28px;border-radius:6px;background:#33401f;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
 .ship-name{font-weight:500;color:#333;font-size:13px}
 .ship-wadden-warning .ship-icon{background:#b91c1c}
+.ship-wadden-warning .carrier-chip{background:#b91c1c1a;color:#b91c1c}
 .wadden-badge{background:#fee2e2;color:#b91c1c;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap}
 .inhoud-items{font-weight:600;color:#33401f;font-size:13px}
 .inhoud-detail{font-size:12px;color:#666;margin-top:2px}
@@ -124,8 +125,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .label-toolbar .filter-select{min-width:170px}
 .zending-status-badge{padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .zst-verwerkt{background:#e8f5e9;color:#2e7d32}
+.zst-ontvangen{background:#e3f2fd;color:#1565c0}
+.zst-onderweg{background:#fff3e0;color:#e8620c}
+.zst-bezorgd{background:#e8f5e9;color:#2e7d32}
 .zst-geannuleerd{background:#ffebee;color:#c62828}
 .zst-onbekend{background:#f5f5f5;color:#999}
+.carrier-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px 3px 6px;border-radius:12px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.carrier-icon{font-size:13px;line-height:1}
+.ship-name-sub{font-size:12px;color:#777;margin-top:3px}
+.date-range-custom{display:none;align-items:center;gap:6px}
+.date-range-custom.open{display:flex}
+.date-range-custom input[type=date]{border:1.5px solid #e0e0e0;border-radius:10px;padding:6px 10px;font-size:13px;font-family:inherit;color:#333;outline:none}
+.date-range-custom input[type=date]:focus{border-color:#f0821e}
 .tracking-link{color:#1565c0;font-weight:700;font-size:13px;text-decoration:none}
 .tracking-link:hover{text-decoration:underline}
 .printed-by{font-size:13px;color:#333}
@@ -255,15 +266,43 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <option value="naam">Klantnaam</option>
 </select>
 <select class="filter-select" id="labelDateSelect" onchange="setLabelDateRange(this.value)">
-<option value="alle">Alle</option>
 <option value="1">Vandaag</option>
+<option value="3">Afgelopen 3 dagen</option>
 <option value="7">Afgelopen 7 dagen</option>
 <option value="14" selected>Afgelopen 14 dagen</option>
-<option value="30">Afgelopen 30 dagen</option>
+<option value="aangepast">Aangepaste periode</option>
 </select>
+<div class="date-range-custom" id="labelDateCustomBox">
+<input type="date" id="labelDateFromInput" onchange="setLabelDateFrom(this.value)">
+<span>t/m</span>
+<input type="date" id="labelDateToInput" onchange="setLabelDateTo(this.value)">
+</div>
 <input type="text" class="label-search-input" id="labelSearchInput" placeholder="Zoek naar zendingen (order, klant, tracking)&hellip;" oninput="applyLabelSearch(this.value)">
 <button type="button" class="print-btn" onclick="bulkPrintLabels()">Print labels</button>
 <span class="filter-count" id="labelFilterCount"></span>
+</div>
+<div class="label-toolbar" id="verzondenToolbarBox" style="display:none">
+<select class="filter-select" id="verzondenSortSelect" onchange="setVerzondenSort(this.value)">
+<option value="datum_desc">Datum label (nieuwste eerst)</option>
+<option value="datum_asc">Datum label (oudste eerst)</option>
+<option value="order">Ordernummer</option>
+<option value="naam">Klantnaam</option>
+</select>
+<select class="filter-select" id="verzondenDateSelect" onchange="setVerzondenDateRange(this.value)">
+<option value="1">Vandaag</option>
+<option value="3">Afgelopen 3 dagen</option>
+<option value="7">Afgelopen 7 dagen</option>
+<option value="14" selected>Afgelopen 14 dagen</option>
+<option value="aangepast">Aangepaste periode</option>
+</select>
+<div class="date-range-custom" id="verzondenDateCustomBox">
+<input type="date" id="verzondenDateFromInput" onchange="setVerzondenDateFrom(this.value)">
+<span>t/m</span>
+<input type="date" id="verzondenDateToInput" onchange="setVerzondenDateTo(this.value)">
+</div>
+<input type="text" class="label-search-input" id="verzondenSearchInput" placeholder="Zoek naar zendingen (order, klant, tracking)&hellip;" oninput="applyVerzondenSearch(this.value)">
+<button type="button" class="print-btn" onclick="refreshTrunkrsStatuses()">Statussen verversen</button>
+<span class="filter-count" id="verzondenFilterCount"></span>
 </div>
 <div id="errorBox"></div>
 <div id="ordersContainer">
@@ -343,6 +382,13 @@ var currentTab = 'inkomend';
 var labelSearchQuery = '';
 var labelSortMode = 'datum_desc';
 var labelDateRange = '14';
+var labelDateFrom = '';
+var labelDateTo = '';
+var verzondenSearchQuery = '';
+var verzondenSortMode = 'datum_desc';
+var verzondenDateRange = '14';
+var verzondenDateFrom = '';
+var verzondenDateTo = '';
 // Let op: escapeHtml() wordt verderop in dit bestand gedefinieerd (bij
 // buildPakbonHtml) en hier ook gebruikt voor de orders-tabel — klantgegevens
 // (naam, adres, verzendmethode...) komen uit orders die klanten zelf
@@ -369,6 +415,9 @@ var toolbar = document.getElementById('toolbarBox');
 if (toolbar) toolbar.style.display = (tab === 'inkomend') ? 'flex' : 'none';
 var labelToolbar = document.getElementById('labelToolbarBox');
 if (labelToolbar) labelToolbar.style.display = (tab === 'label') ? 'flex' : 'none';
+var verzondenToolbar = document.getElementById('verzondenToolbarBox');
+if (verzondenToolbar) verzondenToolbar.style.display = (tab === 'verzonden') ? 'flex' : 'none';
+if (tab === 'label' || tab === 'verzonden') refreshTrunkrsStatuses();
 if (isPackGo) {
 updatePackGoGateVisibility();
 var input = document.getElementById('packGoScanInput');
@@ -482,6 +531,10 @@ sel.appendChild(opt);
 function applyFilter() {
 if (currentTab === 'label') {
 refreshLabelView();
+return;
+}
+if (currentTab === 'verzonden') {
+refreshVerzondenView();
 return;
 }
 var selectedMethod = document.getElementById('methodFilter').value;
@@ -608,6 +661,41 @@ var gradient = 'linear-gradient(' + angle + ', ' + stops + ')';
 return '<div class="flag-icon" style="background:' + gradient + '" title="' + countryCode + '"></div>';
 }
 
+// Herkenbare badge (icoon + naam) per vervoerder, gebruikt in alle
+// tabbladen waar een verzendmethode getoond wordt (Inkomend, Gecreëerde
+// labels, Verzonden, Geannuleerd). Dit zijn geen officiële merklogo's (die
+// hebben we niet als bestand beschikbaar), maar consistente, herkenbare
+// gekleurde iconen per vervoerder - Pieter kan later echte logo-bestanden
+// aanleveren als dat gewenst is.
+var CARRIER_INFO = {
+trunkrs: { naam: 'Trunkrs', kleur: '#e8620c', icoon: '&#128666;' },
+postnl: { naam: 'PostNL', kleur: '#ff6600', icoon: '&#128230;' },
+chillbill: { naam: 'Chill-Bill', kleur: '#33401f', icoon: '&#10052;' },
+afhalen: { naam: 'Afhalen', kleur: '#555555', icoon: '&#127968;' },
+onbekend: { naam: 'Overig', kleur: '#888888', icoon: '&#128666;' }
+};
+
+function detectCarrierKey(shipMethod) {
+if (isPostNLMethod(shipMethod)) return 'postnl';
+if (/[A-Z]{2,}/.test(shipMethod || '')) return 'chillbill';
+if (isTrunkrsMethod(shipMethod)) return 'trunkrs';
+return 'onbekend';
+}
+
+// productLabelOverride: als er al een preciezere naam bekend is (bv. het
+// daadwerkelijk geboekte Trunkrs-product "Trunkrs Same Day Delivery" i.p.v.
+// alleen de ruwe verzendmethode-tekst), gebruik die als subtekst.
+function shipMethodBadgeHtml(order, productLabelOverride) {
+var isPickup = !!(order && (order.shipmentIsPickup || order._isPickup));
+var rawMethod = (order && order._shippingMethod) || (isPickup ? 'Afhalen bij LeJean in Leidschendam' : 'Onbekend');
+var key = isPickup ? 'afhalen' : detectCarrierKey(rawMethod);
+var info = CARRIER_INFO[key] || CARRIER_INFO.onbekend;
+var subLabel = productLabelOverride || rawMethod;
+return '<div class="carrier-chip" style="background:' + info.kleur + '1a;color:' + info.kleur + '">' +
+'<span class="carrier-icon">' + info.icoon + '</span>' + escapeHtml(info.naam) + '</div>' +
+'<div class="ship-name-sub">' + escapeHtml(subLabel) + '</div>';
+}
+
 function renderOrders(orders) {
 var c = document.getElementById('ordersContainer');
 if (!orders.length) {
@@ -652,7 +740,8 @@ var adresSafe = escapeHtml([[postcode,city].filter(Boolean).join(', '), countryC
 
 var printBadge = '<button type="button" class="geprint-badge geprint-' + printStatus + '" onclick="toggleBeide(\'' + ordNummerSafe + '\',\'' + printStatus + '\')" title="Klik om te wisselen tussen Enkel pakbon en Beide geprint">' + printLabel + '</button>';
 
-return '<tr><td><input type="checkbox" class="order-checkbox" data-id="' + idSafe + '" data-num="' + ordNummerSafe + '" onchange="updateSelection()"></td><td><div class="shop-status-icon">&#10003;</div></td><td><span class="status-text">Wacht op verzending</span></td><td><a class="order-num-link" href="#">' + ordNummerSafe + '</a><div class="order-date">' + dateSafe + '</div></td><td><div class="' + (hasShipWarning ? "ship-method-wrap ship-wadden-warning" : "ship-method-wrap") + '"><div class="ship-icon">' + (hasShipWarning ? "&#9888;" : "&#x1F69A;") + '</div><span class="ship-name">' + shipSafe + '</span>' + shipWarningBadgeHtml + '</div></td><td><div class="inhoud-items">' + itemLabel + '</div>' + (qtyText ? '<div class="inhoud-detail">' + qtyText + '</div>' : '') + (valText ? '<div class="inhoud-detail">' + valText + '</div>' : '') + '</td><td><div class="klant-naam">' + (flag ? flag : '') + klantSafe + '</div>' + (email ? '<div class="klant-email">' + emailSafe + '</div>' : '') + ((postcode||city||countryCode) ? '<div class="klant-adres">' + adresSafe + '</div>' : '') + '</td><td>' + printBadge + '</td></tr>';
+var statusLabel = currentTab === 'geannuleerd' ? 'Geannuleerd' : (currentTab === 'verzonden' ? 'Verzonden' : 'Wacht op verzending');
+return '<tr><td><input type="checkbox" class="order-checkbox" data-id="' + idSafe + '" data-num="' + ordNummerSafe + '" onchange="updateSelection()"></td><td><div class="shop-status-icon">&#10003;</div></td><td><span class="status-text">' + escapeHtml(statusLabel) + '</span></td><td><a class="order-num-link" href="#">' + ordNummerSafe + '</a><div class="order-date">' + dateSafe + '</div></td><td><div class="' + (hasShipWarning ? "ship-method-wrap ship-wadden-warning" : "ship-method-wrap") + '">' + shipMethodBadgeHtml(o) + shipWarningBadgeHtml + '</div></td><td><div class="inhoud-items">' + itemLabel + '</div>' + (qtyText ? '<div class="inhoud-detail">' + qtyText + '</div>' : '') + (valText ? '<div class="inhoud-detail">' + valText + '</div>' : '') + '</td><td><div class="klant-naam">' + (flag ? flag : '') + klantSafe + '</div>' + (email ? '<div class="klant-email">' + emailSafe + '</div>' : '') + ((postcode||city||countryCode) ? '<div class="klant-adres">' + adresSafe + '</div>' : '') + '</td><td>' + printBadge + '</td></tr>';
 }).join('');
 c.innerHTML = '<div class="orders-table-wrap"><table class="orders-table"><thead><tr><th><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onchange="toggleSelectAll(this)" title="Alles selecteren"></th><th>SHOP STATUS</th><th>STATUS</th><th>ORDER</th><th>VERZENDMETHODE</th><th>INHOUD VAN DE BESTELLING</th><th>KLANT</th><th>GEPRINT</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
@@ -964,7 +1053,7 @@ resultBox.innerHTML =
 '<div class="packgo-card">' +
 '<div class="packgo-card-head">' +
 '<div><div class="packgo-order-num">' + escapeHtml(order._ordNummer || order.number) + '</div>' +
-'<div class="packgo-ship-line"><span class="ship-icon">&#x1F69A;</span><span class="ship-name">' + shipSafe + '</span></div></div>' +
+'<div class="packgo-ship-line">' + shipMethodBadgeHtml(order) + '</div></div>' +
 '<div><div class="packgo-klant">' + (flag || '') + klant + '</div></div>' +
 '</div>' +
 '<table class="packgo-items-table"><thead><tr><th>Item</th><th>SKU</th><th>Aantal</th></tr></thead><tbody>' + rows + '</tbody></table>' +
@@ -1268,15 +1357,45 @@ cleanup();
 // "Gecreëerde labels": eigen weergave (kolommen/zoeken/sorteren/datumfilter)
 // specifiek voor dit tabblad, i.p.v. de generieke orders-tabel.
 // ============================================================================
-var TRUNKRS_STATE_LABELS = { DATA_PROCESSED: 'Verwerkt' };
-// Let op: dit is de enige state.code die tot nu toe echt bevestigd is tegen
-// de live Trunkrs API (2026-08-29, zie project-notities). Onbekende/nieuwe
-// codes tonen we gewoon met de ruwe waarde i.p.v. te gokken naar een
-// vertaling.
+// Alleen DATA_RECEIVED/DATA_PROCESSED/CANCELLED zijn tot nu toe echt bevestigd
+// tegen de live Trunkrs API (zie project-notities) - de rest van de
+// levenscyclus (opgehaald/onderweg/bezorgd) is nog niet gezien. Voor bekende
+// codes tonen we een nette Nederlandse naam; voor een onbekende code die
+// duidelijk op ophalen/onderweg/bezorgd/geannuleerd lijkt gokken we op basis
+// van de codenaam zelf (bv. bevat "DELIVER" of "BEZORG") in plaats van de
+// ruwe code te tonen - maar zonder dit als bevestigd te presenteren. Volledig
+// onherkenbare codes tonen we leesbaar gemaakt (underscores -> spaties).
+var TRUNKRS_STATE_LABELS = {
+DATA_RECEIVED: { label: 'Ontvangen door Trunkrs', cls: 'zst-ontvangen' },
+DATA_PROCESSED: { label: 'Verwerkt door Trunkrs', cls: 'zst-verwerkt' },
+CANCELLED: { label: 'Geannuleerd', cls: 'zst-geannuleerd' }
+};
+function humanizeStateCode(code) {
+return String(code).toLowerCase().replace(/_/g, ' ').replace(/^./, function(c){ return c.toUpperCase(); });
+}
 function formatZendingStatus(code) {
 if (!code) return { label: 'Onbekend', cls: 'zst-onbekend' };
-var label = TRUNKRS_STATE_LABELS[code] || code;
-return { label: label, cls: TRUNKRS_STATE_LABELS[code] ? 'zst-verwerkt' : 'zst-onbekend' };
+if (TRUNKRS_STATE_LABELS[code]) return TRUNKRS_STATE_LABELS[code];
+if (/DELIVER|BEZORG/i.test(code)) return { label: 'Bezorgd', cls: 'zst-bezorgd' };
+if (/CANCEL|ANNULEER/i.test(code)) return { label: 'Geannuleerd', cls: 'zst-geannuleerd' };
+if (/PICK|TRANSIT|ROUTE|SORT|ONDERWEG/i.test(code)) return { label: 'Onderweg', cls: 'zst-onderweg' };
+return { label: humanizeStateCode(code), cls: 'zst-onbekend' };
+}
+
+// Vraagt de server om voor alle bekende Trunkrs-labels de actuele status op
+// te halen bij Trunkrs zelf (i.p.v. de status van het moment van aanmaken te
+// blijven tonen). Wordt aangeroepen bij het openen van "Gecreëerde labels"
+// of "Verzonden"; ook handmatig te herhalen via de "Statussen verversen"-knop.
+function refreshTrunkrsStatuses() {
+fetch('/api/trunkrs/refresh-statuses', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
+var labels = data.labels || {};
+allOrders.forEach(function(o) {
+var key = String(o._ordNummer || o.number);
+if (labels[key]) o._trunkrsLabel = labels[key];
+});
+if (currentTab === 'label') refreshLabelView();
+if (currentTab === 'verzonden') refreshVerzondenView();
+}).catch(function(e) { console.error('refreshTrunkrsStatuses:', e.message); });
 }
 
 function formatLabelDateTime(iso) {
@@ -1309,13 +1428,27 @@ order: function(a,b){ return String(a._ordNummer||'').localeCompare(String(b._or
 naam: function(a,b){ return String(a._klant||'').localeCompare(String(b._klant||'')); }
 };
 
+// Gedeeld datumbereik-filter voor "Gecreëerde labels" en "Verzonden" - zelfde
+// opties als Sendcloud: Vandaag, Afgelopen 3/7/14 dagen, Aangepaste periode.
+// "Vandaag" = kalenderdag (vanaf 00:00), niet de laatste 24 rollende uren.
+function dateRangeMatches(timestampMs, rangeValue, fromStr, toStr) {
+if (!rangeValue) return true;
+if (rangeValue === 'aangepast') {
+if (!fromStr && !toStr) return true;
+var from = fromStr ? new Date(fromStr + 'T00:00:00').getTime() : -Infinity;
+var to = toStr ? new Date(toStr + 'T23:59:59').getTime() : Infinity;
+return timestampMs >= from && timestampMs <= to;
+}
+var days = parseInt(rangeValue, 10);
+if (isNaN(days)) return true;
+var startOfToday = new Date(); startOfToday.setHours(0,0,0,0);
+var cutoff = startOfToday.getTime() - (days - 1) * 86400000;
+return timestampMs >= cutoff;
+}
+
 function getLabelFilteredOrders() {
 var list = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'label'; });
-if (labelDateRange && labelDateRange !== 'alle') {
-var days = parseInt(labelDateRange, 10);
-var cutoff = Date.now() - days * 86400000;
-list = list.filter(function(o){ var tl = o._trunkrsLabel; var t = tl && tl.createdAt ? new Date(tl.createdAt).getTime() : 0; return t >= cutoff; });
-}
+list = list.filter(function(o){ var tl = o._trunkrsLabel; var t = tl && tl.createdAt ? new Date(tl.createdAt).getTime() : 0; return dateRangeMatches(t, labelDateRange, labelDateFrom, labelDateTo); });
 if (labelSearchQuery) {
 var q = labelSearchQuery.toLowerCase();
 list = list.filter(function(o){
@@ -1329,16 +1462,104 @@ return list.slice().sort(LABEL_SORT_COMPARATORS[labelSortMode] || LABEL_SORT_COM
 
 function applyLabelSearch(value) { labelSearchQuery = value || ''; refreshLabelView(); }
 function setLabelSort(value) { labelSortMode = value; refreshLabelView(); }
-function setLabelDateRange(value) { labelDateRange = value; refreshLabelView(); }
+function setLabelDateRange(value) {
+labelDateRange = value;
+var box = document.getElementById('labelDateCustomBox');
+if (box) box.classList.toggle('open', value === 'aangepast');
+refreshLabelView();
+}
+function setLabelDateFrom(value) { labelDateFrom = value || ''; refreshLabelView(); }
+function setLabelDateTo(value) { labelDateTo = value || ''; refreshLabelView(); }
 
 function refreshLabelView() {
 var filtered = getLabelFilteredOrders();
 var total = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'label'; }).length;
 document.getElementById('count').textContent = total;
 var fc = document.getElementById('labelFilterCount');
-if (fc) fc.textContent = (labelSearchQuery || labelDateRange !== 'alle') ? filtered.length + ' van ' + total + ' labels' : total + ' labels totaal';
+if (fc) fc.textContent = (labelSearchQuery || labelDateRange !== 'aangepast' || labelDateFrom || labelDateTo) ? filtered.length + ' van ' + total + ' labels' : total + ' labels totaal';
 renderLabelOrders(filtered);
 updateSelection();
+}
+
+// ============================================================================
+// "Verzonden": zelfde opzet als "Gecreëerde labels" (zoeken/sorteren/
+// datumfilter/live Trunkrs-status), specifiek voor orders met status
+// "verzonden" i.p.v. de generieke orders-tabel.
+// ============================================================================
+var VERZONDEN_SORT_COMPARATORS = LABEL_SORT_COMPARATORS;
+
+function getVerzondenFilteredOrders() {
+var list = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'verzonden'; });
+list = list.filter(function(o){ var tl = o._trunkrsLabel; var t = tl && tl.createdAt ? new Date(tl.createdAt).getTime() : 0; return dateRangeMatches(t, verzondenDateRange, verzondenDateFrom, verzondenDateTo); });
+if (verzondenSearchQuery) {
+var q = verzondenSearchQuery.toLowerCase();
+list = list.filter(function(o){
+var tl = o._trunkrsLabel || {};
+var hay = [o._ordNummer, o.number, o._klant, o.email, tl.trunkrsNr].filter(Boolean).join(' ').toLowerCase();
+return hay.indexOf(q) !== -1;
+});
+}
+return list.slice().sort(VERZONDEN_SORT_COMPARATORS[verzondenSortMode] || VERZONDEN_SORT_COMPARATORS.datum_desc);
+}
+
+function applyVerzondenSearch(value) { verzondenSearchQuery = value || ''; refreshVerzondenView(); }
+function setVerzondenSort(value) { verzondenSortMode = value; refreshVerzondenView(); }
+function setVerzondenDateRange(value) {
+verzondenDateRange = value;
+var box = document.getElementById('verzondenDateCustomBox');
+if (box) box.classList.toggle('open', value === 'aangepast');
+refreshVerzondenView();
+}
+function setVerzondenDateFrom(value) { verzondenDateFrom = value || ''; refreshVerzondenView(); }
+function setVerzondenDateTo(value) { verzondenDateTo = value || ''; refreshVerzondenView(); }
+
+function refreshVerzondenView() {
+var filtered = getVerzondenFilteredOrders();
+var total = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'verzonden'; }).length;
+document.getElementById('count').textContent = total;
+var fc = document.getElementById('verzondenFilterCount');
+if (fc) fc.textContent = (verzondenSearchQuery || verzondenDateRange !== 'aangepast' || verzondenDateFrom || verzondenDateTo) ? filtered.length + ' van ' + total + ' verzonden orders' : total + ' verzonden orders totaal';
+renderVerzondenOrders(filtered);
+updateSelection();
+}
+
+function renderVerzondenOrders(orders) {
+var c = document.getElementById('ordersContainer');
+if (!orders.length) {
+c.innerHTML = '<div class="empty"><div class="empty-icon">&#9989;</div><p>Geen verzonden orders gevonden</p></div>';
+return;
+}
+var rows = orders.map(function(o) {
+var tl = o._trunkrsLabel || {};
+var ordNummerRaw = String(o._ordNummer || o.number);
+var ordNummer = escapeHtml(ordNummerRaw);
+var klant = escapeHtml(o._klant || [o.firstname, o.middlename, o.lastname].filter(Boolean).join(' ') || o.email || 'Onbekend');
+var email = o.email ? escapeHtml(o.email) : '';
+var serviceLabel = tl.service === 'SAME_DAY' ? 'Trunkrs Same Day Delivery' : (tl.service === 'SAME_DAY_FROZEN_FOOD' ? 'Trunkrs Same Day Frozen' : (o._shippingMethod || '-'));
+var countryCode = ((o.addressShippingCountry && (o.addressShippingCountry.code || o.addressShippingCountry.code3)) || '').toUpperCase();
+var countryTitle = escapeHtml((o.addressShippingCountry && o.addressShippingCountry.title) || countryCode || '-');
+var flag = getFlagEmoji(countryCode);
+var zst = formatZendingStatus(tl.state && tl.state.code);
+var postcode = o.addressShippingZipcode || o.addressBillingZipcode || '';
+var trackUrl = trunkrsTrackingUrl(tl.trunkrsNr, postcode);
+var trackHtml = tl.trunkrsNr ? (trackUrl ? '<a class="tracking-link" href="' + trackUrl + '" target="_blank" rel="noopener">' + escapeHtml(tl.trunkrsNr) + '</a>' : escapeHtml(tl.trunkrsNr)) : '-';
+var datumLabel = escapeHtml(formatLabelDateTime(tl.createdAt));
+return '<tr>' +
+'<td><input type="checkbox" class="order-checkbox" data-id="' + escapeHtml(o.id) + '" data-num="' + ordNummer + '" onchange="updateSelection()"></td>' +
+'<td><span class="zending-status-badge ' + zst.cls + '">' + escapeHtml(zst.label) + '</span></td>' +
+'<td><a class="order-num-link" href="#">' + ordNummer + '</a></td>' +
+'<td><div class="klant-naam">' + (flag || '') + klant + '</div>' + (email ? '<div class="klant-email">' + email + '</div>' : '') + '</td>' +
+'<td>' + shipMethodBadgeHtml(o, serviceLabel) + '</td>' +
+'<td><div class="klant-adres">' + (flag || '') + countryTitle + '</div></td>' +
+'<td>' + trackHtml + '</td>' +
+'<td>' + datumLabel + '</td>' +
+'<td><button type="button" class="eye-btn" title="Labeldetails bekijken" onclick="openLabelDetail(\'' + ordNummer + '\')">&#128065;</button></td>' +
+'</tr>';
+}).join('');
+c.innerHTML = '<div class="orders-table-wrap"><table class="orders-table"><thead><tr>' +
+'<th><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onchange="toggleSelectAll(this)" title="Alles selecteren"></th>' +
+'<th>STATUS</th><th>ORDERNUMMER</th><th>NAAM</th><th>VERZENDMETHODE</th><th>LAND</th><th>TRACKING NUMMER</th><th>DATUM LABEL</th><th></th>' +
+'</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 function renderLabelOrders(orders) {
@@ -1368,7 +1589,7 @@ return '<tr>' +
 '<td><span class="zending-status-badge ' + zst.cls + '">' + escapeHtml(zst.label) + '</span></td>' +
 '<td><a class="order-num-link" href="#">' + ordNummer + '</a></td>' +
 '<td><div class="klant-naam">' + (flag || '') + klant + '</div>' + (email ? '<div class="klant-email">' + email + '</div>' : '') + '</td>' +
-'<td><div class="ship-method-wrap"><div class="ship-icon">&#x1F69A;</div><span class="ship-name">' + escapeHtml(serviceLabel) + '</span></div></td>' +
+'<td><div class="ship-method-wrap">' + shipMethodBadgeHtml(o, serviceLabel) + '</div></td>' +
 '<td><div class="klant-adres">' + (flag || '') + countryTitle + '</div></td>' +
 '<td>' + trackHtml + '</td>' +
 '<td>' + datumLabel + '</td>' +
