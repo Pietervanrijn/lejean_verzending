@@ -17,6 +17,21 @@ const TRUNKRS_API_KEY = process.env.TRUNKRS_API_KEY;
 const TRUNKRS_BASE_URL = process.env.TRUNKRS_BASE_URL || 'https://api.trunkrs.nl/api/v2';
 const trunkrsHeaders = () => ({ 'x-api-key': TRUNKRS_API_KEY, 'Content-Type': 'application/json' });
 
+// --- Pack & Go: aparte PIN-beveiliging (wie heeft een label geprint?) ----
+// Op verzoek van Pieter (2026-08-29): geen volledige gebruikersaccounts,
+// alleen een lichte PIN-check specifiek voor het Pack & Go-scherm, zodat
+// duidelijk is wie een label heeft aangemaakt/geprint. Configuratie via
+// Railway env var PACKGO_MEDEWERKERS, formaat "Naam1:1234,Naam2:5678" -
+// nooit in code/git, net als de andere secrets in deze app.
+const PACKGO_MEDEWERKERS = {};
+(process.env.PACKGO_MEDEWERKERS || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean).forEach(function(pair) {
+const idx = pair.indexOf(':');
+if (idx === -1) return;
+const naam = pair.slice(0, idx).trim();
+const pin = pair.slice(idx + 1).trim();
+if (naam && pin) PACKGO_MEDEWERKERS[pin] = naam;
+});
+
 // --- Toegangsbeveiliging -----------------------------------------------
 // Deze app toonde tot nu toe klantgegevens en liet acties (o.a. het
 // versturen van "klaar om op te halen"-mails) uitvoeren zonder enige
@@ -439,6 +454,7 @@ const trunkrsRes = await axios.post(TRUNKRS_BASE_URL + '/shipments', payload, { 
 const shipment = trunkrsRes.data.data && trunkrsRes.data.data[0] ? trunkrsRes.data.data[0] : trunkrsRes.data.data;
 
 const orderKey = String(order.number);
+const nowIso = new Date().toISOString();
 trunkrsLabelsStore[orderKey] = {
 orderId: order.id,
 trunkrsNr: shipment.trunkrsNr,
@@ -447,7 +463,14 @@ service: service,
 autoService: autoService,
 serviceOverride: serviceOverride || null,
 state: shipment.state,
-createdAt: new Date().toISOString()
+// Het gewicht dat we daadwerkelijk naar Trunkrs hebben gestuurd (zie
+// buildTrunkrsShipmentPayload) - los opgeslagen zodat het ook later nog
+// getoond kan worden (labeldetails), niet alleen ten tijde van aanmaken.
+weightKg: payload.parcel[0].weight.value,
+printedBy: null,
+printedAt: null,
+cancelledAt: null,
+createdAt: nowIso
 };
 saveTrunkrsLabels(trunkrsLabelsStore);
 
@@ -459,10 +482,14 @@ const lightspeedSync = await syncTrunkrsToLightspeed(orderId, shipment.trunkrsNr
 
 res.json({
 ok: true,
+orderId: order.id,
 trunkrsNr: shipment.trunkrsNr,
 label: shipment.label,
 service: service,
 autoService: autoService,
+state: shipment.state,
+weightKg: trunkrsLabelsStore[orderKey].weightKg,
+createdAt: nowIso,
 lightspeedSync: lightspeedSync.ok,
 lightspeedSyncError: lightspeedSync.ok ? null : lightspeedSync.error
 });
@@ -475,6 +502,54 @@ res.status(500).json({ error: 'Trunkrs-label aanmaken mislukt: ' + detail });
 
 app.get('/api/trunkrs/labels', (req, res) => {
 res.json({ labels: trunkrsLabelsStore });
+});
+
+// PIN-check voor het Pack & Go-scherm (zie PACKGO_MEDEWERKERS hierboven).
+// Geeft alleen de naam terug bij een geldige PIN, nooit de lijst van
+// PIN's/namen zelf - de client kent alleen het resultaat van 1 invoer.
+app.post('/api/packgo/login', (req, res) => {
+const { pin } = req.body || {};
+const naam = pin != null ? PACKGO_MEDEWERKERS[String(pin).trim()] : null;
+if (!naam) return res.status(401).json({ error: 'Onjuiste PIN' });
+res.json({ ok: true, naam: naam });
+});
+
+// Legt vast wie een label heeft geprint (voor de "Geprint door"-kolom).
+// Geen aparte beveiliging op deze route zelf - de PIN-check bij inloggen
+// (hierboven) is het beveiligingsmoment; dit endpoint registreert alleen
+// het resultaat daarvan.
+app.post('/api/trunkrs/mark-printed', (req, res) => {
+const { orderNumber, naam } = req.body || {};
+if (!orderNumber || !naam) return res.status(400).json({ error: 'orderNumber en naam verplicht' });
+const key = String(orderNumber);
+if (!trunkrsLabelsStore[key]) return res.status(404).json({ error: 'Geen Trunkrs-label bekend voor deze order' });
+trunkrsLabelsStore[key].printedBy = naam;
+trunkrsLabelsStore[key].printedAt = new Date().toISOString();
+saveTrunkrsLabels(trunkrsLabelsStore);
+res.json({ ok: true });
+});
+
+// Annuleert een aangemaakt Trunkrs-label (echte annulering bij Trunkrs zelf
+// via DELETE /shipments/{trunkrsNr}) en zet de order lokaal op "geannuleerd".
+app.post('/api/trunkrs/cancel-label', async (req, res) => {
+if (!TRUNKRS_API_KEY) return res.status(503).json({ error: 'TRUNKRS_API_KEY is niet ingesteld (Railway env var).' });
+const { orderNumber } = req.body || {};
+if (!orderNumber) return res.status(400).json({ error: 'orderNumber verplicht' });
+const key = String(orderNumber);
+const entry = trunkrsLabelsStore[key];
+if (!entry || !entry.trunkrsNr) return res.status(404).json({ error: 'Geen Trunkrs-label bekend voor deze order' });
+try {
+await axios.delete(TRUNKRS_BASE_URL + '/shipments/' + entry.trunkrsNr, { headers: trunkrsHeaders() });
+entry.cancelledAt = new Date().toISOString();
+saveTrunkrsLabels(trunkrsLabelsStore);
+orderStatusStore[key] = 'geannuleerd';
+saveOrderStatus(orderStatusStore);
+res.json({ ok: true });
+} catch(e) {
+const detail = e.response ? JSON.stringify(e.response.data) : e.message;
+console.error('trunkrs/cancel-label error for order ' + orderNumber + ':', detail);
+res.status(500).json({ error: 'Label annuleren mislukt: ' + detail });
+}
 });
 
 app.post('/api/verzend-print-count', (req, res) => {

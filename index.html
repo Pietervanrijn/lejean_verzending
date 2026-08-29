@@ -114,10 +114,60 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .packgo-success-box .trunkrs-nr{font-weight:800;color:#2e7d32;font-size:16px}
 .packgo-warning-box{background:#fff3e0;border-radius:10px;padding:14px 18px;margin-top:12px;font-size:13px;color:#e65100}
 .packgo-error-box{background:#ffebee;color:#c62828;border-radius:10px;padding:14px 18px;font-weight:600}
-.packgo-label-link{display:inline-block;margin-top:10px;background:#33401f;color:#fff;padding:9px 20px;border-radius:20px;font-size:13px;font-weight:700;text-decoration:none}
+.packgo-label-link{display:inline-block;margin-top:10px;background:#33401f;color:#fff;padding:9px 20px;border-radius:20px;font-size:13px;font-weight:700;text-decoration:none;border:none;cursor:pointer;font-family:inherit}
 .packgo-label-link:hover{background:#242d15}
 .packgo-next-btn{background:transparent;border:1.5px solid #ccc;color:#555;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;margin-top:14px}
 .packgo-next-btn:hover{border-color:#33401f;color:#33401f}
+.label-toolbar{background:#fff;border-radius:12px;padding:16px 24px;margin-bottom:20px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-wrap:wrap}
+.label-search-input{background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:20px;padding:8px 18px;font-size:14px;color:#333;outline:none;min-width:240px;transition:border-color .2s;font-family:inherit}
+.label-search-input:focus{border-color:#f0821e}
+.label-toolbar .filter-select{min-width:170px}
+.zending-status-badge{padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.zst-verwerkt{background:#e8f5e9;color:#2e7d32}
+.zst-geannuleerd{background:#ffebee;color:#c62828}
+.zst-onbekend{background:#f5f5f5;color:#999}
+.tracking-link{color:#1565c0;font-weight:700;font-size:13px;text-decoration:none}
+.tracking-link:hover{text-decoration:underline}
+.printed-by{font-size:13px;color:#333}
+.printed-by.niet-geprint{color:#999;font-style:italic}
+.eye-btn{background:transparent;border:1.5px solid #ddd;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:inline-flex;align-items:center;justify-content:center;color:#555;transition:all .15s}
+.eye-btn:hover{border-color:#f0821e;color:#f0821e}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(20,20,15,.55);z-index:100;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto}
+.modal-overlay.open{display:flex}
+.modal-panel{background:#fff;border-radius:14px;max-width:900px;width:100%;padding:28px 32px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:16px;flex-wrap:wrap}
+.modal-back{background:transparent;border:1.5px solid #ddd;border-radius:20px;padding:8px 16px;font-size:13px;font-weight:600;color:#555;cursor:pointer}
+.modal-back:hover{border-color:#33401f;color:#33401f}
+.modal-actions{display:flex;gap:10px;flex-wrap:wrap}
+.modal-btn{border:none;border-radius:20px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer}
+.modal-btn-primary{background:#33401f;color:#fff}
+.modal-btn-primary:hover{background:#242d15}
+.modal-btn-danger{background:#fff;color:#c62828;border:1.5px solid #f3c6c6}
+.modal-btn-danger:hover{background:#ffebee}
+.modal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin-bottom:22px}
+.modal-box{background:#f6f5f0;border-radius:10px;padding:16px 18px}
+.modal-box h4{font-size:11px;font-weight:700;color:#f0821e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+.modal-field{font-size:13px;color:#333;margin-bottom:8px;line-height:1.5}
+.modal-field b{display:block;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.3px}
+.modal-status-step{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
+.modal-status-dot{width:10px;height:10px;border-radius:50%;background:#2e7d32;margin-top:5px;flex-shrink:0}
+.modal-status-text{font-size:13px;color:#333}
+.modal-status-time{font-size:12px;color:#888}
+.modal-items-table{width:100%;border-collapse:collapse}
+.modal-items-table th{text-align:left;font-size:11px;font-weight:700;color:#f0821e;text-transform:uppercase;letter-spacing:.5px;padding:8px 0;border-bottom:2px solid #f6f5f0}
+.modal-items-table td{padding:10px 0;border-bottom:1px solid #f6f5f0;font-size:13px;color:#333}
+.packgo-login-box{background:#fff;border-radius:12px;padding:30px;box-shadow:0 2px 8px rgba(0,0,0,.08);max-width:360px;margin:0 auto}
+.packgo-login-box h3{font-size:16px;margin-bottom:6px;color:#33401f}
+.packgo-login-box p{font-size:13px;color:#666;margin-bottom:16px}
+.packgo-login-input{width:100%;font-size:18px;padding:12px 16px;border-radius:10px;border:2px solid #e0e0e0;outline:none;text-align:center;letter-spacing:3px;margin-bottom:10px;font-family:inherit}
+.packgo-login-input:focus{border-color:#f0821e}
+.packgo-login-btn{width:100%;background:#f0821e;color:#fff;border:none;padding:12px;border-radius:24px;font-size:14px;font-weight:700;cursor:pointer}
+.packgo-login-btn:hover{background:#f5a04a}
+.packgo-login-error{color:#c62828;font-size:13px;font-weight:600;margin-top:6px;min-height:16px;text-align:center}
+.packgo-session-bar{display:flex;align-items:center;justify-content:space-between;background:#fff;border-radius:12px;padding:12px 20px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);font-size:13px;color:#555}
+.packgo-session-bar b{color:#33401f}
+.packgo-switch-link{color:#1565c0;background:none;border:none;cursor:pointer;font-size:13px;font-weight:600;padding:0}
+.packgo-switch-link:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -169,11 +219,38 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <span class="filter-count" id="filterCount"></span>
 </div>
+<div class="label-toolbar" id="labelToolbarBox" style="display:none">
+<select class="filter-select" id="labelSortSelect" onchange="setLabelSort(this.value)">
+<option value="datum_desc">Aanmaakdatum label (nieuwste eerst)</option>
+<option value="datum_asc">Aanmaakdatum label (oudste eerst)</option>
+<option value="order">Ordernummer</option>
+<option value="naam">Klantnaam</option>
+</select>
+<select class="filter-select" id="labelDateSelect" onchange="setLabelDateRange(this.value)">
+<option value="alle">Alle</option>
+<option value="1">Vandaag</option>
+<option value="7">Afgelopen 7 dagen</option>
+<option value="14" selected>Afgelopen 14 dagen</option>
+<option value="30">Afgelopen 30 dagen</option>
+</select>
+<input type="text" class="label-search-input" id="labelSearchInput" placeholder="Zoek naar zendingen (order, klant, tracking)&hellip;" oninput="applyLabelSearch(this.value)">
+<button type="button" class="print-btn" onclick="bulkPrintLabels()">Print labels</button>
+<span class="filter-count" id="labelFilterCount"></span>
+</div>
 <div id="errorBox"></div>
 <div id="ordersContainer">
 <div class="empty"><div class="empty-icon">&#9203;</div><p>Orders worden geladen...</p></div>
 </div>
 <div id="packGoContainer" style="display:none">
+<div id="packGoLoginGate" class="packgo-login-box">
+<h3>Wie ben jij?</h3>
+<p>Voer je PIN in om te kunnen scannen en labels te printen. Zo weten we altijd wie een label heeft aangemaakt/geprint.</p>
+<input type="text" id="packGoPinInput" class="packgo-login-input" placeholder="PIN" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();packGoLogin();}">
+<button type="button" class="packgo-login-btn" onclick="packGoLogin()">Inloggen</button>
+<div id="packGoLoginError" class="packgo-login-error"></div>
+</div>
+<div id="packGoMain" style="display:none">
+<div class="packgo-session-bar">Ingelogd als <b id="packGoSessionNaam"></b><button type="button" class="packgo-switch-link" onclick="packGoLogout()">Wisselen</button></div>
 <div class="packgo-scan-box">
 <label for="packGoScanInput" class="packgo-scan-label">Scan de barcode op de pakbon</label>
 <input type="text" id="packGoScanInput" class="packgo-scan-input" placeholder="Scan hier of typ PS-code en druk op Enter&hellip;" autocomplete="off">
@@ -182,10 +259,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div id="packGoResult"></div>
 </div>
 </div>
+<div class="modal-overlay" id="medewerkerLoginModal">
+<div class="modal-panel" style="max-width:380px">
+<h3 style="margin-bottom:6px;color:#33401f;font-size:16px">Wie ben jij?</h3>
+<p style="font-size:13px;color:#666;margin-bottom:16px">Voer je PIN in om dit label te printen.</p>
+<input type="text" id="medewerkerPinInput" class="packgo-login-input" placeholder="PIN" inputmode="numeric" autocomplete="off">
+<div id="medewerkerLoginError" class="packgo-login-error"></div>
+<div style="display:flex;gap:10px;margin-top:10px">
+<button type="button" class="packgo-login-btn" id="medewerkerLoginSubmitBtn" style="flex:1">Inloggen</button>
+<button type="button" class="modal-back" id="medewerkerLoginCancelBtn">Annuleren</button>
+</div>
+</div>
+</div>
+<div class="modal-overlay" id="labelDetailModal">
+<div class="modal-panel">
+<div class="modal-head">
+<button type="button" class="modal-back" onclick="closeLabelDetail()">&larr; Terug</button>
+<div class="modal-actions" id="labelDetailActions"></div>
+</div>
+<div id="labelDetailBody"></div>
+</div>
+</div>
+</div>
 <script>
 var allOrders = [];
 var allMethods = [];
 var currentTab = 'inkomend';
+var labelSearchQuery = '';
+var labelSortMode = 'datum_desc';
+var labelDateRange = '14';
 // Let op: escapeHtml() wordt verderop in dit bestand gedefinieerd (bij
 // buildPakbonHtml) en hier ook gebruikt voor de orders-tabel — klantgegevens
 // (naam, adres, verzendmethode...) komen uit orders die klanten zelf
@@ -210,9 +312,12 @@ if (ordersContainer) ordersContainer.style.display = isPackGo ? 'none' : '';
 if (packGoContainer) packGoContainer.style.display = isPackGo ? '' : 'none';
 var toolbar = document.getElementById('toolbarBox');
 if (toolbar) toolbar.style.display = (tab === 'inkomend') ? 'flex' : 'none';
+var labelToolbar = document.getElementById('labelToolbarBox');
+if (labelToolbar) labelToolbar.style.display = (tab === 'label') ? 'flex' : 'none';
 if (isPackGo) {
+updatePackGoGateVisibility();
 var input = document.getElementById('packGoScanInput');
-if (input) setTimeout(function() { input.focus(); }, 0);
+if (input && getPackGoNaam()) setTimeout(function() { input.focus(); }, 0);
 return;
 }
 var titleEl = document.getElementById('statsTitle');
@@ -320,6 +425,10 @@ sel.appendChild(opt);
 }
 
 function applyFilter() {
+if (currentTab === 'label') {
+refreshLabelView();
+return;
+}
 var selectedMethod = document.getElementById('methodFilter').value;
 var selectedPrint = document.getElementById('printFilter').value;
 var filtered = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === currentTab; });
@@ -854,21 +963,32 @@ body: JSON.stringify({ orderId: packGoCurrent.order.id, serviceOverride: service
 });
 var data = await res.json();
 if (!res.ok) throw new Error(data.error || 'Onbekende fout');
-var labelHref = '';
-if (data.label && data.label.pdf) {
-labelHref = /^https?:\/\//i.test(data.label.pdf) ? data.label.pdf : ('data:application/pdf;base64,' + data.label.pdf);
-}
+var labelHref = data.label ? resolveLabelPdfUrl(data.label.pdf) : '';
 var syncWarning = data.lightspeedSync ? '' : '<div class="packgo-warning-box">Let op: het is niet gelukt om de tracking automatisch in Lightspeed te zetten (' + escapeHtml(data.lightspeedSyncError || 'onbekende fout') + '). Zet het trackingnummer handmatig in de order.</div>';
+var thisOrdNummer = String(packGoCurrent.order._ordNummer || packGoCurrent.order.number);
 labelResultBox.innerHTML =
 '<div class="packgo-success-box">' +
 'Label aangemaakt &mdash; Trunkrs-nr <span class="trunkrs-nr">' + escapeHtml(data.trunkrsNr) + '</span> (' + (data.service === 'SAME_DAY' ? 'houdbaar' : 'frozen') + ')' +
-(labelHref ? '<br><a class="packgo-label-link" href="' + labelHref + '" target="_blank" rel="noopener">Label openen / printen</a>' : '') +
+(labelHref ? '<br><button type="button" class="packgo-label-link" onclick="printLabelForOrder(\'' + escapeHtml(thisOrdNummer) + '\')">Label openen / printen</button>' : '') +
 '</div>' + syncWarning +
 '<button type="button" class="packgo-next-btn" onclick="packGoReset()">Volgende scan &rarr;</button>';
 // Lokaal alvast bijwerken zodat de order direct als "label" getoond wordt
-// als je terug zou schakelen naar de gewone tabs, zonder een volledige
-// herlaad van /api/orders nodig te hebben.
+// als je terug zou schakelen naar de gewone tabs, en zodat printen direct
+// kan zonder een volledige herlaad van /api/orders nodig te hebben.
 packGoCurrent.order._orderStatus = 'label';
+packGoCurrent.order._trunkrsLabel = {
+orderId: data.orderId,
+trunkrsNr: data.trunkrsNr,
+label: data.label,
+service: data.service,
+autoService: data.autoService,
+serviceOverride: serviceOverride || null,
+state: data.state,
+weightKg: data.weightKg,
+printedBy: null,
+printedAt: null,
+createdAt: data.createdAt
+};
 } catch(e) {
 labelResultBox.innerHTML = '<div class="packgo-error-box">Label aanmaken mislukt: ' + escapeHtml(e.message) + '</div>';
 } finally {
@@ -884,7 +1004,355 @@ var input = document.getElementById('packGoScanInput');
 if (input) input.focus();
 }
 
+// ============================================================================
+// Pack & Go PIN-login ("wie ben jij?") - aparte, lichte beveiliging specifiek
+// voor dit scherm (zie server.js/PACKGO_MEDEWERKERS). Geen wachtwoorden voor
+// de hele app, alleen een PIN die de naam oplevert die bij elk geprint label
+// wordt vastgelegd. De naam blijft bewaard voor de duur van dit browsertabblad
+// (sessionStorage) zodat je niet bij elke scan opnieuw hoeft in te loggen.
+// ============================================================================
+function getPackGoNaam() {
+try { return sessionStorage.getItem('packgoNaam') || null; } catch(e) { return null; }
+}
+function setPackGoNaam(naam) {
+try { sessionStorage.setItem('packgoNaam', naam); } catch(e) {}
+}
+function clearPackGoNaam() {
+try { sessionStorage.removeItem('packgoNaam'); } catch(e) {}
+}
+
+function updatePackGoGateVisibility() {
+var naam = getPackGoNaam();
+var gate = document.getElementById('packGoLoginGate');
+var main = document.getElementById('packGoMain');
+var sessionNaam = document.getElementById('packGoSessionNaam');
+if (gate) gate.style.display = naam ? 'none' : 'block';
+if (main) main.style.display = naam ? 'block' : 'none';
+if (sessionNaam) sessionNaam.textContent = naam || '';
+}
+
+async function packGoLogin() {
+var input = document.getElementById('packGoPinInput');
+var errorEl = document.getElementById('packGoLoginError');
+var pin = input ? input.value.trim() : '';
+errorEl.textContent = '';
+if (!pin) return;
+try {
+var res = await fetch('/api/packgo/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pin: pin }) });
+var data = await res.json();
+if (!res.ok) { errorEl.textContent = data.error || 'Onjuiste PIN'; return; }
+setPackGoNaam(data.naam);
+input.value = '';
+updatePackGoGateVisibility();
+var scanInput = document.getElementById('packGoScanInput');
+if (scanInput) setTimeout(function(){ scanInput.focus(); }, 0);
+} catch(e) {
+errorEl.textContent = 'Kon niet inloggen: ' + e.message;
+}
+}
+
+function packGoLogout() {
+clearPackGoNaam();
+updatePackGoGateVisibility();
+}
+
+// Gebruikt vanaf overal in de app (Pack & Go zelf, maar ook de knoppen in
+// "Gecreëerde labels") om zeker te weten dat we een naam hebben voordat we
+// een print-actie registreren. Is er al een naam bekend (sessionStorage),
+// dan wordt callback meteen aangeroepen; anders verschijnt een klein
+// login-schermpje en wordt callback pas na een geldige PIN aangeroepen.
+function ensurePackGoNaam(onReady) {
+var naam = getPackGoNaam();
+if (naam) { onReady(naam); return; }
+var overlay = document.getElementById('medewerkerLoginModal');
+if (!overlay) { onReady(null); return; }
+overlay.classList.add('open');
+var pinInput = document.getElementById('medewerkerPinInput');
+var errEl = document.getElementById('medewerkerLoginError');
+errEl.textContent = '';
+if (pinInput) { pinInput.value = ''; setTimeout(function(){ pinInput.focus(); }, 0); }
+var submitBtn = document.getElementById('medewerkerLoginSubmitBtn');
+var cancelBtn = document.getElementById('medewerkerLoginCancelBtn');
+var onKeydown = function(e) { if (e.key === 'Enter') { e.preventDefault(); submitBtn.click(); } };
+if (pinInput) pinInput.addEventListener('keydown', onKeydown);
+var cleanup = function() {
+if (pinInput) pinInput.removeEventListener('keydown', onKeydown);
+submitBtn.onclick = null;
+cancelBtn.onclick = null;
+};
+submitBtn.onclick = function() {
+var pin = pinInput ? pinInput.value.trim() : '';
+errEl.textContent = '';
+if (!pin) return;
+fetch('/api/packgo/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pin: pin }) })
+.then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+.then(function(res){
+if (!res.ok) { errEl.textContent = res.data.error || 'Onjuiste PIN'; return; }
+setPackGoNaam(res.data.naam);
+overlay.classList.remove('open');
+updatePackGoGateVisibility();
+cleanup();
+onReady(res.data.naam);
+})
+.catch(function(e){ errEl.textContent = 'Kon niet inloggen: ' + e.message; });
+};
+cancelBtn.onclick = function() {
+overlay.classList.remove('open');
+cleanup();
+};
+}
+
+// ============================================================================
+// "Gecreëerde labels": eigen weergave (kolommen/zoeken/sorteren/datumfilter)
+// specifiek voor dit tabblad, i.p.v. de generieke orders-tabel.
+// ============================================================================
+var TRUNKRS_STATE_LABELS = { DATA_PROCESSED: 'Verwerkt' };
+// Let op: dit is de enige state.code die tot nu toe echt bevestigd is tegen
+// de live Trunkrs API (2026-08-29, zie project-notities). Onbekende/nieuwe
+// codes tonen we gewoon met de ruwe waarde i.p.v. te gokken naar een
+// vertaling.
+function formatZendingStatus(code) {
+if (!code) return { label: 'Onbekend', cls: 'zst-onbekend' };
+var label = TRUNKRS_STATE_LABELS[code] || code;
+return { label: label, cls: TRUNKRS_STATE_LABELS[code] ? 'zst-verwerkt' : 'zst-onbekend' };
+}
+
+function formatLabelDateTime(iso) {
+if (!iso) return '-';
+var d = new Date(iso);
+if (isNaN(d.getTime())) return '-';
+var dd = String(d.getDate()).padStart(2,'0');
+var mm = String(d.getMonth()+1).padStart(2,'0');
+var hh = String(d.getHours()).padStart(2,'0');
+var mi = String(d.getMinutes()).padStart(2,'0');
+return dd + '-' + mm + '-' + d.getFullYear() + ' ' + hh + ':' + mi;
+}
+
+// Link naar de echte Trunkrs track&trace-pagina voor deze zending (zelfde
+// URL-formaat als de tabbladen die al open staan bij Pieter tijdens het
+// testen, bv. parcel.trunkrs.nl/420219915/2266%20GA).
+function trunkrsTrackingUrl(trunkrsNr, postcode) {
+if (!trunkrsNr) return null;
+return 'https://parcel.trunkrs.nl/' + encodeURIComponent(trunkrsNr) + '/' + encodeURIComponent(String(postcode || '').trim());
+}
+
+function findOrderByOrdNummer(ordNummer) {
+return allOrders.find(function(o){ return String(o._ordNummer) === String(ordNummer) || String(o.number) === String(ordNummer); }) || null;
+}
+
+var LABEL_SORT_COMPARATORS = {
+datum_desc: function(a,b){ return new Date((b._trunkrsLabel && b._trunkrsLabel.createdAt) || 0) - new Date((a._trunkrsLabel && a._trunkrsLabel.createdAt) || 0); },
+datum_asc: function(a,b){ return new Date((a._trunkrsLabel && a._trunkrsLabel.createdAt) || 0) - new Date((b._trunkrsLabel && b._trunkrsLabel.createdAt) || 0); },
+order: function(a,b){ return String(a._ordNummer||'').localeCompare(String(b._ordNummer||'')); },
+naam: function(a,b){ return String(a._klant||'').localeCompare(String(b._klant||'')); }
+};
+
+function getLabelFilteredOrders() {
+var list = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'label'; });
+if (labelDateRange && labelDateRange !== 'alle') {
+var days = parseInt(labelDateRange, 10);
+var cutoff = Date.now() - days * 86400000;
+list = list.filter(function(o){ var tl = o._trunkrsLabel; var t = tl && tl.createdAt ? new Date(tl.createdAt).getTime() : 0; return t >= cutoff; });
+}
+if (labelSearchQuery) {
+var q = labelSearchQuery.toLowerCase();
+list = list.filter(function(o){
+var tl = o._trunkrsLabel || {};
+var hay = [o._ordNummer, o.number, o._klant, o.email, tl.trunkrsNr].filter(Boolean).join(' ').toLowerCase();
+return hay.indexOf(q) !== -1;
+});
+}
+return list.slice().sort(LABEL_SORT_COMPARATORS[labelSortMode] || LABEL_SORT_COMPARATORS.datum_desc);
+}
+
+function applyLabelSearch(value) { labelSearchQuery = value || ''; refreshLabelView(); }
+function setLabelSort(value) { labelSortMode = value; refreshLabelView(); }
+function setLabelDateRange(value) { labelDateRange = value; refreshLabelView(); }
+
+function refreshLabelView() {
+var filtered = getLabelFilteredOrders();
+var total = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'label'; }).length;
+document.getElementById('count').textContent = total;
+var fc = document.getElementById('labelFilterCount');
+if (fc) fc.textContent = (labelSearchQuery || labelDateRange !== 'alle') ? filtered.length + ' van ' + total + ' labels' : total + ' labels totaal';
+renderLabelOrders(filtered);
+updateSelection();
+}
+
+function renderLabelOrders(orders) {
+var c = document.getElementById('ordersContainer');
+if (!orders.length) {
+c.innerHTML = '<div class="empty"><div class="empty-icon">&#9989;</div><p>Geen labels gevonden</p></div>';
+return;
+}
+var rows = orders.map(function(o) {
+var tl = o._trunkrsLabel || {};
+var ordNummerRaw = String(o._ordNummer || o.number);
+var ordNummer = escapeHtml(ordNummerRaw);
+var klant = escapeHtml(o._klant || [o.firstname, o.middlename, o.lastname].filter(Boolean).join(' ') || o.email || 'Onbekend');
+var email = o.email ? escapeHtml(o.email) : '';
+var serviceLabel = tl.service === 'SAME_DAY' ? 'Trunkrs Same Day Delivery' : (tl.service === 'SAME_DAY_FROZEN_FOOD' ? 'Trunkrs Same Day Frozen' : (o._shippingMethod || '-'));
+var countryCode = ((o.addressShippingCountry && (o.addressShippingCountry.code || o.addressShippingCountry.code3)) || '').toUpperCase();
+var countryTitle = escapeHtml((o.addressShippingCountry && o.addressShippingCountry.title) || countryCode || '-');
+var flag = getFlagEmoji(countryCode);
+var zst = formatZendingStatus(tl.state && tl.state.code);
+var postcode = o.addressShippingZipcode || o.addressBillingZipcode || '';
+var trackUrl = trunkrsTrackingUrl(tl.trunkrsNr, postcode);
+var trackHtml = tl.trunkrsNr ? (trackUrl ? '<a class="tracking-link" href="' + trackUrl + '" target="_blank" rel="noopener">' + escapeHtml(tl.trunkrsNr) + '</a>' : escapeHtml(tl.trunkrsNr)) : '-';
+var datumLabel = escapeHtml(formatLabelDateTime(tl.createdAt));
+var printedBy = tl.printedBy ? '<span class="printed-by">' + escapeHtml(tl.printedBy) + '</span>' : '<span class="printed-by niet-geprint">Nog niet geprint</span>';
+return '<tr>' +
+'<td><input type="checkbox" class="order-checkbox" data-id="' + escapeHtml(o.id) + '" data-num="' + ordNummer + '" onchange="updateSelection()"></td>' +
+'<td><span class="zending-status-badge ' + zst.cls + '">' + escapeHtml(zst.label) + '</span></td>' +
+'<td><a class="order-num-link" href="#">' + ordNummer + '</a></td>' +
+'<td><div class="klant-naam">' + (flag || '') + klant + '</div>' + (email ? '<div class="klant-email">' + email + '</div>' : '') + '</td>' +
+'<td><div class="ship-method-wrap"><div class="ship-icon">&#x1F69A;</div><span class="ship-name">' + escapeHtml(serviceLabel) + '</span></div></td>' +
+'<td><div class="klant-adres">' + (flag || '') + countryTitle + '</div></td>' +
+'<td>' + trackHtml + '</td>' +
+'<td>' + datumLabel + '</td>' +
+'<td>Nee</td>' +
+'<td>' + printedBy + '</td>' +
+'<td><button type="button" class="eye-btn" title="Labeldetails bekijken" onclick="openLabelDetail(\'' + ordNummer + '\')">&#128065;</button></td>' +
+'</tr>';
+}).join('');
+c.innerHTML = '<div class="orders-table-wrap"><table class="orders-table"><thead><tr>' +
+'<th><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onchange="toggleSelectAll(this)" title="Alles selecteren"></th>' +
+'<th>ZENDING STATUS</th><th>ORDERNUMMER</th><th>NAAM</th><th>VERZENDMETHODE</th><th>LAND</th><th>TRACKING NUMMER</th><th>DATUM LABEL</th><th>IN OPHAALRAPPORT</th><th>GEPRINT DOOR</th><th></th>' +
+'</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+// Trunkrs levert label.pdf in de praktijk altijd als een echte https-URL
+// (bevestigd 2026-08-29). Deze helper vangt ook een kale base64-string op
+// (zoals mock-/testdata dat soms doet) zonder een dubbel "data:"-prefix te
+// plakken als het al een data:-URL is.
+function resolveLabelPdfUrl(pdf) {
+if (!pdf) return null;
+return /^(https?:|data:)/i.test(pdf) ? pdf : ('data:application/pdf;base64,' + pdf);
+}
+
+// Haalt de label-PDF-URL op voor een order (uit reeds geladen data) en
+// registreert, na een geldige PIN, wie deze print-actie deed.
+function printLabelForOrder(ordNummer) {
+var o = findOrderByOrdNummer(ordNummer) || (packGoCurrent && String(packGoCurrent.order._ordNummer || packGoCurrent.order.number) === String(ordNummer) ? packGoCurrent.order : null);
+var tl = o && o._trunkrsLabel;
+var url = tl && tl.label ? resolveLabelPdfUrl(tl.label.pdf) : null;
+if (!url) { alert('Geen label-URL gevonden voor deze order.'); return; }
+ensurePackGoNaam(function(naam) {
+if (!naam) return;
+markPrintedAndOpen(ordNummer, url, naam);
+});
+}
+
+function markPrintedAndOpen(ordNummer, url, naam) {
+fetch('/api/trunkrs/mark-printed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orderNumber: ordNummer, naam: naam }) })
+.then(function(){
+var o = findOrderByOrdNummer(ordNummer);
+if (o && o._trunkrsLabel) { o._trunkrsLabel.printedBy = naam; o._trunkrsLabel.printedAt = new Date().toISOString(); }
+if (currentTab === 'label') refreshLabelView();
+})
+.catch(function(e){ console.error('mark-printed error', e); });
+window.open(url, '_blank');
+}
+
+// Print alle geselecteerde labels ineens. Let op: browsers kunnen meerdere
+// tegelijk geopende tabbladen als pop-ups blokkeren - print in dat geval de
+// geblokkeerde orders alsnog 1-voor-1 via het oogje/de rij zelf.
+function bulkPrintLabels() {
+var checked = Array.from(document.querySelectorAll('.order-checkbox:checked'));
+if (!checked.length) return;
+var nums = checked.map(function(cb){ return cb.getAttribute('data-num'); });
+ensurePackGoNaam(function(naam) {
+if (!naam) return;
+nums.forEach(function(num) {
+var o = findOrderByOrdNummer(num);
+var tl = o && o._trunkrsLabel;
+var url = tl && tl.label ? resolveLabelPdfUrl(tl.label.pdf) : null;
+if (url) markPrintedAndOpen(num, url, naam);
+});
+});
+}
+
+function openLabelDetail(ordNummer) {
+var o = findOrderByOrdNummer(ordNummer);
+if (!o) return;
+var tl = o._trunkrsLabel || {};
+var overlay = document.getElementById('labelDetailModal');
+var body = document.getElementById('labelDetailBody');
+var klant = escapeHtml(o._klant || [o.firstname, o.middlename, o.lastname].filter(Boolean).join(' ') || '-');
+var email = escapeHtml(o.email || '-');
+var telefoon = escapeHtml(o.telephone || o.mobile || o.phone || '-');
+var adresRegel = escapeHtml([[o.addressShippingStreet, o.addressShippingNumber].filter(Boolean).join(' '), o.addressShippingExtension].filter(Boolean).join(' '));
+var postcodeCity = escapeHtml([o.addressShippingZipcode, o.addressShippingCity].filter(Boolean).join(' '));
+var countryTitle = escapeHtml((o.addressShippingCountry && (o.addressShippingCountry.title || o.addressShippingCountry.code)) || '-');
+var serviceLabel = tl.service === 'SAME_DAY' ? 'Trunkrs Same Day Delivery' : 'Trunkrs Same Day Frozen';
+var zst = formatZendingStatus(tl.state && tl.state.code);
+var postcode = o.addressShippingZipcode || o.addressBillingZipcode || '';
+var trackUrl = trunkrsTrackingUrl(tl.trunkrsNr, postcode);
+var labelUrl = tl.label ? resolveLabelPdfUrl(tl.label.pdf) : null;
+var ordNumSafe = escapeHtml(String(o._ordNummer || o.number));
+
+body.innerHTML =
+'<div class="modal-grid">' +
+'<div class="modal-box"><h4>Details van zending</h4>' +
+'<div class="modal-field"><b>Ordernummer</b>' + escapeHtml(o._ordNummer || o.number) + '</div>' +
+'<div class="modal-field"><b>Afzendadres</b>Nederland, VleesAtelier LeJean, Veenpoldersweg 22, Leidschendam</div>' +
+'<div class="modal-field"><b>Verzendmethode</b>' + escapeHtml(serviceLabel) + '</div>' +
+(tl.weightKg ? '<div class="modal-field"><b>Gewicht zending</b>' + escapeHtml(tl.weightKg) + ' kg</div>' : '') +
+'</div>' +
+'<div class="modal-box"><h4>Details klant</h4>' +
+'<div class="modal-field"><b>Klantnaam</b>' + klant + '</div>' +
+'<div class="modal-field"><b>Klant e-mail</b>' + email + '</div>' +
+'<div class="modal-field"><b>Bestemmingsadres</b>' + adresRegel + '<br>' + postcodeCity + '<br>' + countryTitle + '</div>' +
+'<div class="modal-field"><b>Telefoonnummer</b>' + telefoon + '</div>' +
+'</div>' +
+'<div class="modal-box"><h4>Status</h4>' +
+'<div class="modal-status-step"><div class="modal-status-dot"></div><div><div class="modal-status-text">Label aangemaakt (' + escapeHtml(zst.label) + ')</div><div class="modal-status-time">' + escapeHtml(formatLabelDateTime(tl.createdAt)) + '</div></div></div>' +
+(tl.printedBy ? '<div class="modal-status-step"><div class="modal-status-dot"></div><div><div class="modal-status-text">Geprint door ' + escapeHtml(tl.printedBy) + '</div><div class="modal-status-time">' + escapeHtml(formatLabelDateTime(tl.printedAt)) + '</div></div></div>' : '') +
+(trackUrl ? '<div class="modal-field" style="margin-top:6px"><b>Trunkrs Track &amp; Trace</b><a class="tracking-link" href="' + trackUrl + '" target="_blank" rel="noopener">' + escapeHtml(tl.trunkrsNr) + '</a></div>' : '') +
+'</div>' +
+'</div>' +
+'<table class="modal-items-table"><thead><tr><th>Omschrijving</th><th>SKU</th><th>Aantal</th></tr></thead><tbody id="modalItemsBody"><tr><td colspan="3">Items laden&hellip;</td></tr></tbody></table>';
+
+document.getElementById('labelDetailActions').innerHTML =
+(labelUrl ? '<button type="button" class="modal-btn modal-btn-primary" onclick="printLabelForOrder(\'' + ordNumSafe + '\')">Print label</button>' : '') +
+'<button type="button" class="modal-btn modal-btn-danger" onclick="cancelLabelFromDetail(\'' + ordNumSafe + '\')">Annuleer label</button>';
+
+overlay.classList.add('open');
+
+fetch('/api/orders/' + o.id + '/products').then(function(r){ return r.json(); }).then(function(d){
+var products = d.products || [];
+var rows = products.map(function(p){
+var title = escapeHtml((p.productTitle || p.title || '-') + (p.variantTitle ? ' | ' + p.variantTitle : ''));
+var sku = escapeHtml(p.articleCode || p.sku || '-');
+var qty = p.quantityOrdered || p.quantity || 1;
+return '<tr><td>' + title + '</td><td>' + sku + '</td><td>' + qty + '</td></tr>';
+}).join('');
+var itemsBody = document.getElementById('modalItemsBody');
+if (itemsBody) itemsBody.innerHTML = rows || '<tr><td colspan="3">Geen items gevonden</td></tr>';
+}).catch(function(){
+var itemsBody = document.getElementById('modalItemsBody');
+if (itemsBody) itemsBody.innerHTML = '<tr><td colspan="3">Kon items niet laden</td></tr>';
+});
+}
+
+function closeLabelDetail() {
+document.getElementById('labelDetailModal').classList.remove('open');
+}
+
+function cancelLabelFromDetail(ordNummer) {
+if (!confirm('Weet je zeker dat je dit Trunkrs-label wilt annuleren? Dit annuleert de echte zending bij Trunkrs.')) return;
+fetch('/api/trunkrs/cancel-label', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orderNumber: ordNummer }) })
+.then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+.then(function(res){
+if (!res.ok) { alert('Annuleren mislukt: ' + (res.data.error || 'onbekende fout')); return; }
+closeLabelDetail();
+loadOrders();
+})
+.catch(function(e){ alert('Annuleren mislukt: ' + e.message); });
+}
+
 initPackGoScanner();
+updatePackGoGateVisibility();
 
 loadOrders();
 </script>
