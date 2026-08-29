@@ -103,6 +103,19 @@ try { fs.writeFileSync(TRUNKRS_LABELS_FILE, JSON.stringify(data)); } catch(e) { 
 }
 let trunkrsLabelsStore = loadTrunkrsLabels();
 
+// Koppelt ordernummer -> Lightspeed-order-id (bv. "80442" -> 12345678).
+// Nodig om orders die lokaal als "label"/"verzonden"/"geannuleerd" staan
+// gericht te kunnen opzoeken zodra ze buiten fetchOrders()'s statusfilter
+// vallen (zie fetchLocallyTrackedMissingOrders hieronder).
+const ORDER_ID_MAP_FILE = DATA_DIR + '/order-id-map.json';
+function loadOrderIdMap() {
+try { return JSON.parse(fs.readFileSync(ORDER_ID_MAP_FILE, 'utf8')); } catch(e) { return {}; }
+}
+function saveOrderIdMap(data) {
+try { fs.writeFileSync(ORDER_ID_MAP_FILE, JSON.stringify(data)); } catch(e) { console.error('saveOrderIdMap error:', e.message); }
+}
+let orderIdMapStore = loadOrderIdMap();
+
 // Voert fn uit over items met maximaal `limit` gelijktijdige API-calls,
 // in plaats van alles in één keer (voorkomt rate-limit fouten bij Lightspeed
 // wanneer er veel orders tegelijk verrijkt moeten worden).
@@ -138,7 +151,55 @@ page++;
 } catch(e) { console.error('fetchOrders error (status ' + status + '):', e.message); more = false; }
 }
 }
-return all;
+
+// Onthoud ordernummer -> order-id voor alles wat we nu zien, zodat we
+// deze orders later (als ze uit bovenstaande statussen vallen) alsnog
+// gericht kunnen opzoeken.
+let idMapChanged = false;
+for (const o of all) {
+const key = String(o.number);
+if (orderIdMapStore[key] !== o.id) { orderIdMapStore[key] = o.id; idMapChanged = true; }
+}
+if (idMapChanged) saveOrderIdMap(orderIdMapStore);
+
+// Bug (ontdekt 2026-08-29): zodra een Trunkrs-label wordt aangemaakt, zet
+// syncTrunkrsToLightspeed() de bijbehorende shipment op status 'shipped',
+// waardoor de order zelf bij Lightspeed ook buiten bovenstaande twee
+// statussen valt en dus helemaal uit fetchOrders() (en dus alle tabs)
+// verdwijnt — inclusief "Gecreëerde labels"/"Verzonden", waar hij juist
+// zichtbaar zou moeten blijven. Orders die lokaal als 'label', 'verzonden'
+// of 'geannuleerd' gemarkeerd staan, of waarvoor een Trunkrs-label bestaat,
+// halen we daarom hieronder alsnog gericht op via hun bekende order-id.
+const extra = await fetchLocallyTrackedMissingOrders(all);
+return all.concat(extra);
+}
+
+async function fetchLocallyTrackedMissingOrders(alreadyFetched) {
+const present = new Set(alreadyFetched.map(o => String(o.number)));
+const trackedNumbers = new Set([
+...Object.keys(orderStatusStore).filter(n => orderStatusStore[n] && orderStatusStore[n] !== 'inkomend'),
+...Object.keys(trunkrsLabelsStore)
+]);
+const extra = [];
+for (const num of trackedNumbers) {
+if (present.has(num)) continue;
+const id = (trunkrsLabelsStore[num] && trunkrsLabelsStore[num].orderId) || orderIdMapStore[num];
+if (!id) {
+// Kan gebeuren voor orders die al 'label'/'verzonden' waren VOORDAT deze
+// fix live ging (order-id nog niet bekend) — deze blijven helaas
+// onvindbaar totdat er handmatig iets aan te doen is; nieuwe gevallen
+// worden vanaf nu altijd correct bijgehouden.
+console.error('fetchLocallyTrackedMissingOrders: geen bekend order-id voor order ' + num + ', kan niet opzoeken.');
+continue;
+}
+try {
+const r = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + id + '.json', { headers: apiHeaders() });
+if (r.data.order) extra.push(r.data.order);
+} catch(e) {
+console.error('fetchLocallyTrackedMissingOrders error voor order ' + num + ' (id ' + id + '):', e.message);
+}
+}
+return extra;
 }
 
 async function fetchOrderProductsSummary(orderId) {
@@ -379,6 +440,7 @@ const shipment = trunkrsRes.data.data && trunkrsRes.data.data[0] ? trunkrsRes.da
 
 const orderKey = String(order.number);
 trunkrsLabelsStore[orderKey] = {
+orderId: order.id,
 trunkrsNr: shipment.trunkrsNr,
 label: shipment.label,
 service: service,
