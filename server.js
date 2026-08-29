@@ -239,13 +239,13 @@ const parcel = {
 description: 'LJ Verzending order ' + order.number,
 reference: String(order.number)
 };
-if (String(countryCode).toUpperCase() === 'BE') {
+// Trunkrs vereist 'weight' op elke parcel, niet alleen bij BE (empirisch
+// vastgesteld op 2026-08-29: INVALID_REQUEST "the key 'weight' is required
+// but was not present" op een NL-zending zonder gewicht). Als we niets
+// kunnen schatten uit de variant-titel, nemen we een conservatieve
+// minimum-waarde i.p.v. de aanvraag te laten mislukken.
 const kg = estimateParcelWeightKg(products);
-// Verplicht bij BE volgens Trunkrs-docs; als we niets kunnen schatten,
-// nemen we een conservatieve minimum-waarde i.p.v. de aanvraag te laten
-// mislukken (moet in de praktijk gevalideerd worden).
 parcel.weight = { value: kg != null ? kg : 1, unit: 'kg' };
-}
 return {
 orderReference: 'LJ-' + order.number,
 recipient: {
