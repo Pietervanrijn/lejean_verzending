@@ -10,6 +10,13 @@ const API_KEY = process.env.LIGHTSPEED_API_KEY;
 const API_SECRET = process.env.LIGHTSPEED_API_SECRET;
 const SHOP = 'nl';
 
+// --- Trunkrs-labelintegratie ---------------------------------------------
+// TRUNKRS_BASE_URL staat standaard op productie, maar is overschrijfbaar
+// (bv. naar de staging-omgeving van Trunkrs) zonder codewijziging.
+const TRUNKRS_API_KEY = process.env.TRUNKRS_API_KEY;
+const TRUNKRS_BASE_URL = process.env.TRUNKRS_BASE_URL || 'https://api.trunkrs.nl/api/v2';
+const trunkrsHeaders = () => ({ 'x-api-key': TRUNKRS_API_KEY, 'Content-Type': 'application/json' });
+
 // --- Toegangsbeveiliging -----------------------------------------------
 // Deze app toonde tot nu toe klantgegevens en liet acties (o.a. het
 // versturen van "klaar om op te halen"-mails) uitvoeren zonder enige
@@ -84,6 +91,18 @@ try { fs.writeFileSync(VERZEND_COUNT_FILE, JSON.stringify(data)); } catch(e) { c
 }
 let verzendCountStore = loadVerzendCounts();
 
+// Trunkrs-labels per order (keyed op ordernummer, bv. "ORD80406"): bewaart
+// trunkrsNr, het label (pdf/zpl), de gebruikte service en de laatst bekende
+// status, zodat we deze na een herstart/redeploy niet kwijtraken.
+const TRUNKRS_LABELS_FILE = DATA_DIR + '/trunkrs-labels.json';
+function loadTrunkrsLabels() {
+try { return JSON.parse(fs.readFileSync(TRUNKRS_LABELS_FILE, 'utf8')); } catch(e) { return {}; }
+}
+function saveTrunkrsLabels(data) {
+try { fs.writeFileSync(TRUNKRS_LABELS_FILE, JSON.stringify(data)); } catch(e) { console.error('saveTrunkrsLabels error:', e.message); }
+}
+let trunkrsLabelsStore = loadTrunkrsLabels();
+
 // Voert fn uit over items met maximaal `limit` gelijktijdige API-calls,
 // in plaats van alles in één keer (voorkomt rate-limit fouten bij Lightspeed
 // wanneer er veel orders tegelijk verrijkt moeten worden).
@@ -156,9 +175,91 @@ const ordNummer = String(order.number || '').toUpperCase().startsWith('ORD') ? S
 const printStatus = printStatusStore[String(order.number)] || 'geen';
 const orderStatus = orderStatusStore[String(order.number)] || 'inkomend';
 const summary = await fetchOrderProductsSummary(order.id);
-return { ...order, _klant: klant, _ordNummer: ordNummer, _shippingMethod: shippingMethod, _isPickup: isPickup, _printStatus: printStatus, _orderStatus: orderStatus, itemCount: summary.itemCount, quantityOrdered: summary.quantityOrdered };
+const trunkrsLabel = trunkrsLabelsStore[String(order.number)] || null;
+return { ...order, _klant: klant, _ordNummer: ordNummer, _shippingMethod: shippingMethod, _isPickup: isPickup, _printStatus: printStatus, _orderStatus: orderStatus, itemCount: summary.itemCount, quantityOrdered: summary.quantityOrdered, _trunkrsLabel: trunkrsLabel };
 });
 return enriched;
+}
+
+// --- Trunkrs: houdbaar/frozen-bepaling -----------------------------------
+// Afspraak met Pieter (2026-08-28): artikelnummers 8000 t/m 9000 zijn
+// "houdbaar". Een order is ALLEEN houdbaar (SAME_DAY) als ALLE producten in
+// de order een artikelnummer in dat bereik hebben; zodra er ook maar 1
+// product buiten dat bereik valt (of het artikelnummer niet numeriek is)
+// wordt de veilige/conservatieve default gebruikt: SAME_DAY_FROZEN_FOOD.
+// De gebruiker kan dit in de UI altijd handmatig overschrijven.
+const HOUDBAAR_ARTIKEL_MIN = 8000;
+const HOUDBAAR_ARTIKEL_MAX = 9000;
+
+function isHoudbaarArticleCode(code) {
+const n = parseInt(String(code == null ? '' : code).trim(), 10);
+return !isNaN(n) && n >= HOUDBAAR_ARTIKEL_MIN && n <= HOUDBAAR_ARTIKEL_MAX;
+}
+
+function bepaalTrunkrsService(products) {
+if (!Array.isArray(products) || products.length === 0) return 'SAME_DAY_FROZEN_FOOD';
+const alleHoudbaar = products.every(function(p) {
+return isHoudbaarArticleCode(p.articleCode || p.sku || p.itemNumber || p.ean || p.ean13 || p.code);
+});
+return alleHoudbaar ? 'SAME_DAY' : 'SAME_DAY_FROZEN_FOOD';
+}
+
+// --- Trunkrs: gewicht schatten uit producttitel ---------------------------
+// Lightspeed/de webshop heeft geen apart gewichtsveld; het gewicht staat als
+// vrije tekst in de producttitel, bv. "3750~3850 gram" of "2000 gram". We
+// pakken de bovengrens van een range (conservatief: liever te zwaar
+// ingeschat dan te licht). Trunkrs vereist een gewicht alleen bij
+// BE-zendingen; voor NL laten we het weg (niet verplicht volgens de docs).
+// LET OP: de eenheid ("kg" hieronder) is een aanname — nog niet bevestigd
+// tegen een echte Trunkrs-response, zie project-notities.
+function parseWeightGramsFromTitle(title) {
+if (!title) return 0;
+const m = String(title).match(/(\d+(?:[.,]\d+)?)\s*(?:~\s*(\d+(?:[.,]\d+)?))?\s*gram/i);
+if (!m) return 0;
+const a = parseFloat(m[1].replace(',', '.'));
+const b = m[2] ? parseFloat(m[2].replace(',', '.')) : null;
+return b != null ? Math.max(a, b) : a;
+}
+
+function estimateParcelWeightKg(products) {
+const totalGrams = (products || []).reduce(function(sum, p) {
+const title = (p.productTitle || p.title || p.fulltitle || p.name || '') + ' ' + (p.variantTitle || '');
+const qty = p.quantityOrdered || p.quantity || p.amount || 1;
+return sum + parseWeightGramsFromTitle(title) * qty;
+}, 0);
+return totalGrams > 0 ? Math.round((totalGrams / 1000) * 100) / 100 : null;
+}
+
+// --- Trunkrs: shipment-payload opbouwen -----------------------------------
+function buildTrunkrsShipmentPayload(order, products, service) {
+const naam = order.addressShippingName || [order.firstname, order.middlename, order.lastname].filter(Boolean).join(' ') || order._klant || order.email || '-';
+const straatRegel = [order.addressShippingStreet, order.addressShippingNumber].filter(Boolean).join(' ') + (order.addressShippingExtension ? (' ' + order.addressShippingExtension) : '');
+const countryCode = (order.addressShippingCountry && (order.addressShippingCountry.code || order.addressShippingCountry.code3)) || 'NL';
+const parcel = {
+description: 'LJ Verzending order ' + order.number,
+reference: String(order.number)
+};
+if (String(countryCode).toUpperCase() === 'BE') {
+const kg = estimateParcelWeightKg(products);
+// Verplicht bij BE volgens Trunkrs-docs; als we niets kunnen schatten,
+// nemen we een conservatieve minimum-waarde i.p.v. de aanvraag te laten
+// mislukken (moet in de praktijk gevalideerd worden).
+parcel.weight = { value: kg != null ? kg : 1, unit: 'kg' };
+}
+return {
+orderReference: 'LJ-' + order.number,
+recipient: {
+name: naam,
+emailAddress: order.email || '',
+phoneNumber: order.telephone || order.addressShippingPhone || '',
+address: straatRegel,
+postalCode: order.addressShippingZipcode || '',
+city: order.addressShippingCity || '',
+country: String(countryCode).toUpperCase()
+},
+parcel: [parcel],
+service: service
+};
 }
 
 app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
@@ -234,6 +335,84 @@ results.push({ id, ok: false, error: e.message });
 }
 }
 res.json({ results });
+});
+
+// Beste-poging: schrijft trunkrsNr/tracking terug naar de Lightspeed-order
+// (zichtbaar bij "Verzending" in de Back Office) en zet de shipment op
+// "verzonden". De exacte veldnamen (status/trackingCode) zijn nog niet
+// empirisch bevestigd tegen de echte Lightspeed-API (zie project-notities) —
+// dit mag dus falen zonder de labelaanmaak zelf te laten mislukken; de
+// aanroeper krijgt lightspeedSync:false + de foutmelding terug om dit zelf
+// te kunnen controleren/corrigeren.
+async function syncTrunkrsToLightspeed(orderId, trunkrsNr) {
+try {
+const shipRes = await axios.get('https://api.webshopapp.com/' + SHOP + '/shipments.json', { headers: apiHeaders(), params: { order: orderId } });
+const shipment = shipRes.data.shipments && shipRes.data.shipments[0];
+if (!shipment) return { ok: false, error: 'geen shipment gevonden voor order ' + orderId };
+await axios.put('https://api.webshopapp.com/' + SHOP + '/shipments/' + shipment.id + '.json', {
+shipment: { status: 'shipped', trackingCode: String(trunkrsNr) }
+}, { headers: apiHeaders() });
+return { ok: true };
+} catch(e) {
+console.error('syncTrunkrsToLightspeed error for order ' + orderId + ':', e.response ? JSON.stringify(e.response.data) : e.message);
+return { ok: false, error: e.message };
+}
+}
+
+app.post('/api/trunkrs/label', async (req, res) => {
+if (!TRUNKRS_API_KEY) return res.status(503).json({ error: 'TRUNKRS_API_KEY is niet ingesteld (Railway env var).' });
+const { orderId, serviceOverride } = req.body || {};
+if (!orderId) return res.status(400).json({ error: 'orderId verplicht' });
+try {
+const orderRes = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + orderId + '.json', { headers: apiHeaders() });
+const order = orderRes.data.order;
+if (!order) return res.status(404).json({ error: 'Order niet gevonden' });
+const productsRes = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + orderId + '/products.json', { headers: apiHeaders() });
+const products = productsRes.data.orderProducts || productsRes.data.products || [];
+
+const autoService = bepaalTrunkrsService(products);
+const service = (serviceOverride === 'SAME_DAY' || serviceOverride === 'SAME_DAY_FROZEN_FOOD') ? serviceOverride : autoService;
+const payload = buildTrunkrsShipmentPayload(order, products, service);
+
+const trunkrsRes = await axios.post(TRUNKRS_BASE_URL + '/shipments', payload, { headers: trunkrsHeaders() });
+const shipment = trunkrsRes.data.data && trunkrsRes.data.data[0] ? trunkrsRes.data.data[0] : trunkrsRes.data.data;
+
+const orderKey = String(order.number);
+trunkrsLabelsStore[orderKey] = {
+trunkrsNr: shipment.trunkrsNr,
+label: shipment.label,
+service: service,
+autoService: autoService,
+serviceOverride: serviceOverride || null,
+state: shipment.state,
+createdAt: new Date().toISOString()
+};
+saveTrunkrsLabels(trunkrsLabelsStore);
+
+// Lokaal automatisch verplaatsen naar "Labels aangemaakt"
+orderStatusStore[orderKey] = 'label';
+saveOrderStatus(orderStatusStore);
+
+const lightspeedSync = await syncTrunkrsToLightspeed(orderId, shipment.trunkrsNr);
+
+res.json({
+ok: true,
+trunkrsNr: shipment.trunkrsNr,
+label: shipment.label,
+service: service,
+autoService: autoService,
+lightspeedSync: lightspeedSync.ok,
+lightspeedSyncError: lightspeedSync.ok ? null : lightspeedSync.error
+});
+} catch(e) {
+const detail = e.response ? JSON.stringify(e.response.data) : e.message;
+console.error('trunkrs/label error for order ' + orderId + ':', detail);
+res.status(500).json({ error: 'Trunkrs-label aanmaken mislukt: ' + detail });
+}
+});
+
+app.get('/api/trunkrs/labels', (req, res) => {
+res.json({ labels: trunkrsLabelsStore });
 });
 
 app.post('/api/verzend-print-count', (req, res) => {
