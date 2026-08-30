@@ -156,6 +156,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .eye-btn{background:transparent;border:1.5px solid #ddd;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:inline-flex;align-items:center;justify-content:center;color:#555;transition:all .15s}
 .eye-btn:hover{border-color:#f0821e;color:#f0821e}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(20,20,15,.55);z-index:100;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto}
+/* De PIN-login voor Pack & Go kan ook geopend worden vanuit een al openstaande
+   modal (bv. het labeldetail-scherm bij "Print label"/"Verstuur naar station").
+   Beide delen dezelfde .modal-overlay-basisstijl (dus zelfde z-index) - zonder
+   deze override komt de al-openstaande modal er als laatste in de HTML-bron
+   bovenop te liggen en is de PIN-prompt onzichtbaar/onklikbaar. */
+#medewerkerLoginModal{z-index:150}
 .modal-overlay.open{display:flex}
 .modal-panel{background:#fff;border-radius:14px;max-width:900px;width:100%;padding:28px 32px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:16px;flex-wrap:wrap}
@@ -207,6 +213,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .settings-hint{font-size:12.5px;color:#888;margin-bottom:14px;line-height:1.5}
 .medewerker-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #f6f5f0}
 .medewerker-naam{flex:1;font-size:13.5px;font-weight:600;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.print-station-row{padding:9px 0;border-bottom:1px solid #f6f5f0}
+.print-station-info{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.print-station-actions{display:flex;gap:8px;flex-wrap:wrap}
 .medewerker-pin{font-family:monospace;font-size:13px;color:#666;letter-spacing:1px;min-width:56px}
 .medewerker-pin-toggle{background:transparent;border:none;cursor:pointer;font-size:14px;padding:2px 4px;opacity:.6}
 .medewerker-pin-toggle:hover{opacity:1}
@@ -401,9 +410,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </div>
 <div id="medewerkerError" class="packgo-login-error"></div>
 </div>
-<div class="settings-section settings-section-placeholder">
-<h4>Meer instellingen</h4>
-<p class="settings-hint">Extra opties (zoals afdrukvoorkeuren) komen hier later bij.</p>
+<div class="settings-section">
+<h4>Afdrukopties &ndash; inpakstations</h4>
+<p class="settings-hint">Elk inpakstation heeft zijn eigen (netwerk)labelprinter. Voeg een station toe en download het bijbehorende print-programmaatje &ndash; dat draait lokaal op die pc en stuurt verzendlabels die je naar dit station verstuurt automatisch naar de eigen printer, zonder printvenster.</p>
+<div id="printStationList"></div>
+<div class="medewerker-add-row">
+<input type="text" id="nieuwStationNaam" placeholder="Naam (bv. Inpakstation 1)" autocomplete="off">
+<input type="text" id="nieuwStationIp" placeholder="Printer IP-adres (bv. 192.168.1.50)" autocomplete="off">
+<input type="text" id="nieuwStationPoort" placeholder="Poort (standaard 9100)" inputmode="numeric" autocomplete="off">
+</div>
+<div class="medewerker-add-actions">
+<button type="button" class="modal-btn modal-btn-primary" onclick="addPrintStation()">Station toevoegen</button>
+</div>
+<div id="printStationError" class="packgo-login-error"></div>
 </div>
 </div>
 </div>
@@ -1504,6 +1523,7 @@ function openSettingsDrawer() {
 document.getElementById('settingsDrawerOverlay').classList.add('open');
 document.getElementById('settingsDrawer').classList.add('open');
 loadMedewerkers();
+loadPrintStations();
 }
 
 function closeSettingsDrawer() {
@@ -1601,6 +1621,80 @@ if (medewerkerEditingNaam === naam) cancelMedewerkerEdit();
 loadMedewerkers();
 })
 .catch(function() { window.alert('Verwijderen mislukt.'); });
+}
+
+// --- Instellingenpaneel: inpakstations beheren (Afdrukopties) ------------
+// Zelfde soort opzet als de Pack & Go-medewerkers hierboven, maar dan voor
+// de print-agent per inpakstation (zie server.js: /api/settings/print-
+// stations en /api/print-agent/*).
+var printStationsCache = [];
+
+function loadPrintStations() {
+var box = document.getElementById('printStationList');
+fetch('/api/settings/print-stations').then(function(r) { return r.json(); }).then(function(data) {
+printStationsCache = data.stations || [];
+renderPrintStationList();
+}).catch(function() {
+if (box) box.innerHTML = '<div class="settings-hint">Kon inpakstations niet laden.</div>';
+});
+}
+
+function formatLaatstGezien(iso) {
+if (!iso) return 'nog nooit online geweest';
+var diffMs = Date.now() - new Date(iso).getTime();
+var mins = Math.round(diffMs / 60000);
+if (mins < 1) return 'net nu';
+if (mins < 60) return mins + ' min geleden';
+var uren = Math.round(mins / 60);
+if (uren < 24) return uren + ' uur geleden';
+return Math.round(uren / 24) + ' dagen geleden';
+}
+
+function renderPrintStationList() {
+var box = document.getElementById('printStationList');
+if (!box) return;
+if (!printStationsCache.length) { box.innerHTML = '<div class="settings-hint">Nog geen inpakstations ingesteld.</div>'; return; }
+box.innerHTML = printStationsCache.map(function(s) {
+return '<div class="print-station-row">' +
+'<div class="print-station-info"><span class="medewerker-naam" style="white-space:normal">' + escapeHtml(s.naam) + '</span>' +
+'<span class="settings-hint">' + escapeHtml(s.printerIp) + ':' + escapeHtml(s.printerPort) + ' &middot; ' + escapeHtml(formatLaatstGezien(s.lastSeenAt)) + '</span></div>' +
+'<div class="print-station-actions">' +
+'<button type="button" class="medewerker-edit-btn" onclick="downloadPrintAgent(\'' + s.id + '\')">Download print-agent</button>' +
+'<button type="button" class="medewerker-delete-btn" onclick="deletePrintStation(\'' + s.id + '\')">Verwijderen</button>' +
+'</div></div>';
+}).join('');
+}
+
+function addPrintStation() {
+var naam = document.getElementById('nieuwStationNaam').value.trim();
+var ip = document.getElementById('nieuwStationIp').value.trim();
+var poortRaw = document.getElementById('nieuwStationPoort').value.trim();
+var errBox = document.getElementById('printStationError');
+errBox.textContent = '';
+if (!naam || !ip) { errBox.textContent = 'Naam en printer-IP zijn verplicht.'; return; }
+fetch('/api/settings/print-stations', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ naam: naam, printerIp: ip, printerPort: poortRaw || 9100 }) })
+.then(function(r) { return r.json().then(function(data) { return { status: r.status, data: data }; }); })
+.then(function(res) {
+if (res.status !== 200) { errBox.textContent = (res.data && res.data.error) || 'Opslaan mislukt.'; return; }
+document.getElementById('nieuwStationNaam').value = '';
+document.getElementById('nieuwStationIp').value = '';
+document.getElementById('nieuwStationPoort').value = '';
+loadPrintStations();
+})
+.catch(function() { errBox.textContent = 'Opslaan mislukt (netwerkfout).'; });
+}
+
+function deletePrintStation(id) {
+var s = printStationsCache.filter(function(x) { return x.id === id; })[0];
+if (!window.confirm('Inpakstation "' + (s ? s.naam : '') + '" verwijderen? De bijbehorende print-agent kan dan niet meer gebruikt worden.')) return;
+fetch('/api/settings/print-stations/' + encodeURIComponent(id), { method: 'DELETE' })
+.then(function(r) { return r.json(); })
+.then(function() { loadPrintStations(); })
+.catch(function() { window.alert('Verwijderen mislukt.'); });
+}
+
+function downloadPrintAgent(id) {
+window.open('/api/settings/print-stations/' + encodeURIComponent(id) + '/agent-script', '_blank');
 }
 
 // Gebruikt vanaf overal in de app (Pack & Go zelf, maar ook de knoppen in
@@ -1956,8 +2050,40 @@ markPrintedAndOpen(ordNummer, url, naam);
 });
 }
 
+// Stuurt het label van deze order naar de printer van 1 gekozen inpakstation
+// (de print-agent op die pc haalt de printjob vervolgens zelf op, zie
+// server.js). Registreert dit ook meteen als "geprint door" - net als een
+// gewone print vanuit deze modal.
+function sendLabelToStation(ordNummer) {
+var select = document.getElementById('labelStationSelect');
+var stationId = select && select.value;
+if (!stationId) { alert('Geen inpakstation geselecteerd.'); return; }
+var station = printStationsCache.filter(function(s) { return s.id === stationId; })[0];
+ensurePackGoNaam(function(naam) {
+if (!naam) return;
+fetch('/api/print-stations/' + encodeURIComponent(stationId) + '/print-label', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ orderNumber: bareOrderNummer(ordNummer) }) })
+.then(function(r) { return r.json().then(function(data) { return { status: r.status, data: data }; }); })
+.then(function(res) {
+if (res.status !== 200) { alert((res.data && res.data.error) || 'Versturen naar station mislukt.'); return; }
+fetch('/api/trunkrs/mark-printed', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ orderNumber: bareOrderNummer(ordNummer), naam: naam }) }).catch(function(){});
+alert('Label verstuurd naar ' + (station ? station.naam : 'het gekozen station') + '. De print-agent daar print het automatisch.');
+})
+.catch(function() { alert('Versturen naar station mislukt (netwerkfout).'); });
+});
+}
+
+// trunkrsLabelsStore (server.js) is altijd gesleuteld op het kale
+// ordernummer (o.number, bv. "80384"), maar o._ordNummer/de weergavewaarde
+// in deze modal is "ORD80384" (met prefix). mark-printed/cancel-label/
+// print-stations-print-label verwachten allemaal de kale vorm - zonder deze
+// helper zoeken die routes op de verkeerde sleutel en vinden ze het label
+// nooit (stille 404, geen zichtbare foutmelding voor de gebruiker).
+function bareOrderNummer(s) {
+return String(s || '').replace(/^ORD/i, '');
+}
+
 function markPrintedAndOpen(ordNummer, url, naam) {
-fetch('/api/trunkrs/mark-printed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orderNumber: ordNummer, naam: naam }) })
+fetch('/api/trunkrs/mark-printed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orderNumber: bareOrderNummer(ordNummer), naam: naam }) })
 .then(function(){
 var o = findOrderByOrdNummer(ordNummer);
 if (o && o._trunkrsLabel) { o._trunkrsLabel.printedBy = naam; o._trunkrsLabel.printedAt = new Date().toISOString(); }
@@ -2026,8 +2152,16 @@ body.innerHTML =
 '</div>' +
 '<table class="modal-items-table"><thead><tr><th>Omschrijving</th><th>SKU</th><th>Aantal</th></tr></thead><tbody id="modalItemsBody"><tr><td colspan="3">Items laden&hellip;</td></tr></tbody></table>';
 
+var stationPickerHtml = '';
+if (labelUrl && printStationsCache.length) {
+stationPickerHtml = '<select id="labelStationSelect" class="filter-select" style="margin-left:8px">' +
+printStationsCache.map(function(s) { return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.naam) + '</option>'; }).join('') +
+'</select>' +
+'<button type="button" class="modal-btn" onclick="sendLabelToStation(\'' + ordNumSafe + '\')">Verstuur naar station</button>';
+}
 document.getElementById('labelDetailActions').innerHTML =
 (labelUrl ? '<button type="button" class="modal-btn modal-btn-primary" onclick="printLabelForOrder(\'' + ordNumSafe + '\')">Print label</button>' : '') +
+stationPickerHtml +
 '<button type="button" class="modal-btn modal-btn-danger" onclick="cancelLabelFromDetail(\'' + ordNumSafe + '\')">Annuleer label</button>';
 
 overlay.classList.add('open');
@@ -2054,7 +2188,7 @@ document.getElementById('labelDetailModal').classList.remove('open');
 
 function cancelLabelFromDetail(ordNummer) {
 if (!confirm('Weet je zeker dat je dit Trunkrs-label wilt annuleren? Dit annuleert de echte zending bij Trunkrs.')) return;
-fetch('/api/trunkrs/cancel-label', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orderNumber: ordNummer }) })
+fetch('/api/trunkrs/cancel-label', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orderNumber: bareOrderNummer(ordNummer) }) })
 .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
 .then(function(res){
 if (!res.ok) { alert('Annuleren mislukt: ' + (res.data.error || 'onbekende fout')); return; }
@@ -2083,6 +2217,7 @@ restoreExtraFilters();
 initPackGoScanner();
 updatePackGoGateVisibility();
 restorePersistedToolbarSettings();
+loadPrintStations();
 
 loadOrders();
 </script>
