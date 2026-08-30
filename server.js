@@ -421,8 +421,12 @@ res.json({ ok: true, printStatus: printStatusStore });
 
 app.post('/api/order-status', (req, res) => {
 const { orderNumbers, status } = req.body || {};
-const allowedStatuses = ['inkomend', 'label', 'verzonden', 'geannuleerd'];
-if (!Array.isArray(orderNumbers) || !allowedStatuses.includes(status)) return res.status(400).json({ error: 'orderNumbers en een geldige status (inkomend, label, verzonden, geannuleerd) zijn verplicht' });
+// "genegeerd" = lokaal verborgen via de rode "Geselecteerde bestellingen
+// verwijderen"-knop op Inkomende orders (op verzoek van Pieter, 2026-08-30).
+// Dit is puur een lokale statuswissel in deze app - er wordt nooit iets bij
+// Lightspeed of de vervoerder aangepast of verwijderd.
+const allowedStatuses = ['inkomend', 'label', 'verzonden', 'geannuleerd', 'genegeerd'];
+if (!Array.isArray(orderNumbers) || !allowedStatuses.includes(status)) return res.status(400).json({ error: 'orderNumbers en een geldige status (inkomend, label, verzonden, geannuleerd, genegeerd) zijn verplicht' });
 orderNumbers.forEach(n => {
 orderStatusStore[String(n)] = status;
 });
