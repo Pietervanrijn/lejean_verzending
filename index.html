@@ -21,7 +21,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .tab-btn:hover{color:#33401f}
 .tab-btn.active{background:#fff;color:#1a1a1a;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .container{max-width:1400px;margin:30px auto;padding:0 20px}
-.toolbar{background:#fff;border-radius:12px;padding:16px 24px;margin-bottom:20px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-wrap:wrap}#toolbarBox{flex-direction:column;align-items:stretch}.toolbar-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.toolbar{background:#fff;border-radius:12px;padding:16px 24px;margin-bottom:20px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-wrap:wrap}#toolbarBox{flex-direction:column;align-items:stretch}#labelToolbarBox{flex-direction:column;align-items:stretch}.toolbar-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .filter-label{font-size:13px;font-weight:600;color:#555;white-space:nowrap}
 .filter-select{background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:6px;padding:8px 20px;font-size:14px;font-weight:500;color:#333;cursor:pointer;outline:none;transition:border-color .2s;min-width:180px}
 #methodFilter{min-width:130px}
@@ -131,6 +131,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .label-search-input:focus{border-color:#f0821e}
 .label-toolbar .filter-select{min-width:170px}
 .zending-status-badge{padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.zst-geprint{background:#e8f5e9;color:#2e7d32}
 .zst-verwerkt{background:#e8f5e9;color:#2e7d32}
 .zst-ontvangen{background:#e3f2fd;color:#1565c0}
 .zst-onderweg{background:#fff3e0;color:#e8620c}
@@ -294,6 +295,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </div>
 </div>
 <div class="label-toolbar" id="labelToolbarBox" style="display:none">
+<div class="toolbar-row toolbar-actions-row">
+<div class="print-btn-group">
+<button type="button" class="print-btn print-btn-main" id="labelPrintBtn" onclick="bulkPrintLabels()" disabled>Print label (<span id="labelSelCount">0</span>)</button>
+<button type="button" class="print-btn-caret" id="labelPrintCaretBtn" onclick="toggleLabelActionsMenu(event)" disabled><span class="print-btn-arrow">&#x25BE;</span></button>
+<div class="print-dropdown-menu" id="labelActionsMenu">
+<div class="print-dropdown-item" onclick="bulkCancelLabels()"><span>Annuleren</span></div>
+<div class="print-dropdown-item" onclick="bulkMarkDelivered()"><span>Markeer als bezorgd</span></div>
+<div class="print-dropdown-item" onclick="bulkPrintPakbonForLabelTab()"><span>Print pakbon</span></div>
+<div class="print-dropdown-item" onclick="bulkPrintLabelsFromMenu()"><span>Print verzendlabel</span></div>
+</div>
+</div>
+</div>
+<div class="toolbar-row toolbar-filters-row">
 <select class="filter-select" id="labelSortSelect" onchange="setLabelSort(this.value)">
 <option value="datum_desc">Aanmaakdatum label (nieuwste eerst)</option>
 <option value="datum_asc">Aanmaakdatum label (oudste eerst)</option>
@@ -313,8 +327,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <input type="date" id="labelDateToInput" onchange="setLabelDateTo(this.value)">
 </div>
 <input type="text" class="label-search-input" id="labelSearchInput" placeholder="Zoek naar zendingen (order, klant, tracking)&hellip;" oninput="applyLabelSearch(this.value)">
-<button type="button" class="print-btn" onclick="bulkPrintLabels()">Print labels</button>
 <span class="filter-count" id="labelFilterCount"></span>
+</div>
 </div>
 <div class="label-toolbar" id="verzondenToolbarBox" style="display:none">
 <select class="filter-select" id="verzondenSortSelect" onchange="setVerzondenSort(this.value)">
@@ -635,6 +649,9 @@ var __delBtn = document.getElementById('deleteSelectedBtn'); if (__delBtn) __del
 var __restoreBtn = document.getElementById('restoreSelectedBtn'); var __restoreCountEl = document.getElementById('restoreSelCount');
 if (__restoreBtn) __restoreBtn.disabled = checked.length === 0;
 if (__restoreCountEl) __restoreCountEl.textContent = checked.length;
+var __labelPrintBtn = document.getElementById('labelPrintBtn'); if (__labelPrintBtn) __labelPrintBtn.disabled = checked.length === 0;
+var __labelPrintCaretBtn = document.getElementById('labelPrintCaretBtn'); if (__labelPrintCaretBtn) __labelPrintCaretBtn.disabled = checked.length === 0;
+var __labelSelCountEl = document.getElementById('labelSelCount'); if (__labelSelCountEl) __labelSelCountEl.textContent = checked.length;
 }
 
 function toggleSelectAll(cb) {
@@ -656,7 +673,7 @@ if (!confirm('Weet je zeker dat je ' + aantal + ' bestelling' + (aantal === 1 ? 
 var btn = document.getElementById('deleteSelectedBtn');
 if (btn) btn.disabled = true;
 try {
-var res = await fetch('/api/order-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderNumbers: nums, status: 'genegeerd' }) });
+var res = await fetch('/api/order-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderNumbers: nums.map(bareOrderNummer), status: 'genegeerd' }) });
 if (!res.ok) { var d = await res.json().catch(function(){ return {}; }); throw new Error(d.error || ('Server error: ' + res.status)); }
 nums.forEach(function(n) {
 var o = allOrders.find(function(x){ return String(x._ordNummer || x.number) === String(n); });
@@ -677,7 +694,7 @@ var nums = checked.map(function(cb){ return cb.getAttribute('data-num'); });
 var btn = document.getElementById('restoreSelectedBtn');
 if (btn) btn.disabled = true;
 try {
-var res = await fetch('/api/order-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderNumbers: nums, status: 'inkomend' }) });
+var res = await fetch('/api/order-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderNumbers: nums.map(bareOrderNummer), status: 'inkomend' }) });
 if (!res.ok) { var d = await res.json().catch(function(){ return {}; }); throw new Error(d.error || ('Server error: ' + res.status)); }
 nums.forEach(function(n) {
 var o = allOrders.find(function(x){ return String(x._ordNummer || x.number) === String(n); });
@@ -693,7 +710,7 @@ if (btn) btn.disabled = document.querySelectorAll('.order-checkbox:checked').len
 async function toggleBeide(orderNumber, currentStatus) {
 if (currentStatus === 'geen') return;
 var newStatus = currentStatus === 'beide' ? 'pakbon' : 'beide';
-await fetch('/api/print-status', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orderNumbers:[orderNumber], status:newStatus }) });
+await fetch('/api/print-status', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orderNumbers:[bareOrderNummer(orderNumber)], status:newStatus }) });
 allOrders.forEach(function(o){ if (o._ordNummer === orderNumber) o._printStatus = newStatus; });
 applyFilter();
 }
@@ -944,7 +961,7 @@ win.document.close();
 await fetch('/api/print-status', {
 method: 'POST',
 headers: {'Content-Type':'application/json'},
-body: JSON.stringify({ orderNumbers: nums, status: 'pakbon' })
+body: JSON.stringify({ orderNumbers: nums.map(bareOrderNummer), status: 'pakbon' })
 });
 var pickupIds = orders.filter(function(o){ return o.shipmentIsPickup || o._isPickup; }).map(function(o){ return o.id; });
 if (pickupIds.length) {
@@ -1082,6 +1099,8 @@ else if (printMode === 'pakbon_labels') { await printPakbonnen(sel); await bulkC
 document.addEventListener('click', function(e) {
 var menu = document.getElementById('verzendMenu');
 if (menu && (!e.target.closest || !e.target.closest('.print-btn-group'))) menu.style.display = 'none';
+var labelMenu = document.getElementById('labelActionsMenu');
+if (labelMenu && (!e.target.closest || !e.target.closest('.print-btn-group'))) labelMenu.style.display = 'none';
 var addMenu = document.getElementById('addFilterMenu');
 if (addMenu && (!e.target.closest || !e.target.closest('.add-filter-wrap'))) addMenu.style.display = 'none';
 });
@@ -1797,8 +1816,17 @@ CANCELLED: { label: 'Geannuleerd', cls: 'zst-geannuleerd' }
 function humanizeStateCode(code) {
 return String(code).toLowerCase().replace(/_/g, ' ').replace(/^./, function(c){ return c.toUpperCase(); });
 }
+// Icoontje voor de "Geprint"-status (net als Sendcloud's groene label-icoon
+// vóór een zending nog enige live trackinginformatie van de vervoerder
+// heeft) - erft zijn kleur van de badge-tekst via stroke="currentColor".
+var ZST_GEPRINT_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.2L4 3a1 1 0 0 0-1 1l.2 5.59a2 2 0 0 0 .59 1.4l9.6 9.6a2 2 0 0 0 2.82 0l4.4-4.4a2 2 0 0 0 0-2.82Z"></path><circle cx="7.5" cy="7.5" r="1.3" fill="currentColor" stroke="none"></circle></svg>';
+
 function formatZendingStatus(code) {
-if (!code) return { label: 'Onbekend', cls: 'zst-onbekend' };
+// Zodra een label is aangemaakt maar Trunkrs nog geen enkele trackingcode
+// heeft doorgegeven, is de zending in de praktijk gewoon "Geprint" - dat is
+// duidelijker voor op de inpakvloer dan "Onbekend" (idem Sendcloud, op
+// verzoek van Pieter 2026-08-30).
+if (!code) return { label: 'Geprint', cls: 'zst-geprint', icon: true };
 if (TRUNKRS_STATE_LABELS[code]) return TRUNKRS_STATE_LABELS[code];
 // Vangnet voor eventuele toekomstige/nieuwe Trunkrs-codes die niet in de
 // lijst hierboven staan: gok op basis van de codenaam zelf, zonder dit als
@@ -1983,7 +2011,7 @@ var trackHtml = tl.trunkrsNr ? (trackUrl ? '<a class="tracking-link" href="' + t
 var datumLabel = escapeHtml(formatLabelDateTime(tl.createdAt));
 return '<tr>' +
 '<td><input type="checkbox" class="order-checkbox" data-id="' + escapeHtml(o.id) + '" data-num="' + ordNummer + '" onchange="updateSelection()"></td>' +
-'<td><span class="zending-status-badge ' + zst.cls + '">' + escapeHtml(zst.label) + '</span></td>' +
+'<td><span class="zending-status-badge ' + zst.cls + '">' + (zst.icon ? ZST_GEPRINT_ICON : '') + escapeHtml(zst.label) + '</span></td>' +
 '<td><a class="order-num-link" href="#">' + ordNummer + '</a></td>' +
 '<td><div class="klant-naam">' + (flag || '') + klant + '</div>' + (email ? '<div class="klant-email">' + email + '</div>' : '') + '</td>' +
 '<td>' + shipMethodBadgeHtml(o, serviceLabel) + '</td>' +
@@ -2023,7 +2051,7 @@ var datumLabel = escapeHtml(formatLabelDateTime(tl.createdAt));
 var printedBy = tl.printedBy ? '<span class="printed-by">' + escapeHtml(tl.printedBy) + '</span>' : '<span class="printed-by niet-geprint">Nog niet geprint</span>';
 return '<tr>' +
 '<td><input type="checkbox" class="order-checkbox" data-id="' + escapeHtml(o.id) + '" data-num="' + ordNummer + '" onchange="updateSelection()"></td>' +
-'<td><span class="zending-status-badge ' + zst.cls + '">' + escapeHtml(zst.label) + '</span></td>' +
+'<td><span class="zending-status-badge ' + zst.cls + '">' + (zst.icon ? ZST_GEPRINT_ICON : '') + escapeHtml(zst.label) + '</span></td>' +
 '<td><a class="order-num-link" href="#">' + ordNummer + '</a></td>' +
 '<td><div class="klant-naam">' + (flag || '') + klant + '</div>' + (email ? '<div class="klant-email">' + email + '</div>' : '') + '</td>' +
 '<td><div class="ship-method-wrap">' + shipMethodBadgeHtml(o, serviceLabel) + '</div></td>' +
@@ -2122,6 +2150,80 @@ var url = tl && tl.label ? resolveLabelPdfUrl(tl.label.pdf) : null;
 if (url) markPrintedAndOpen(num, url, naam);
 });
 });
+}
+
+// --- "Gecreëerde labels"-tab: split-knop met bulk-acties op geselecteerde
+// labels (zelfde soort opzet als "Aanmaken: Pakbonnen" op Inkomende orders,
+// maar dan met de acties die Sendcloud op hun "Aangemaakte labels"-tab heeft:
+// Annuleren, Markeer als bezorgd, Print pakbon, Print verzendlabel).
+// Gebruikt bareOrderNummer() vóór elke server-aanroep die op ordernummer
+// zoekt (trunkrsLabelsStore/orderStatusStore zijn altijd gesleuteld op het
+// kale nummer, niet op de "ORD"-weergavewaarde - zie ook mark-printed/
+// cancel-label hierboven).
+function toggleLabelActionsMenu(e) {
+e.stopPropagation();
+var menu = document.getElementById('labelActionsMenu');
+if (!menu) return;
+menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+}
+
+function closeLabelActionsMenu() {
+var menu = document.getElementById('labelActionsMenu');
+if (menu) menu.style.display = 'none';
+}
+
+// Annuleert de echte Trunkrs-zending(en) van de geselecteerde labels en zet
+// de order(s) daarmee op "geannuleerd" (dat gebeurt al server-side in
+// /api/trunkrs/cancel-label, zie ook cancelLabelFromDetail hieronder) -
+// waardoor ze verschuiven naar het tabblad "Geannuleerd".
+function bulkCancelLabels() {
+closeLabelActionsMenu();
+var sel = getSelectedOrders();
+if (!sel.nums.length) return;
+var aantal = sel.nums.length;
+if (!confirm('Weet je zeker dat je ' + aantal + ' geselecteerde Trunkrs-label' + (aantal === 1 ? '' : 's') + ' wilt annuleren? Dit annuleert de echte zending(en) bij Trunkrs en verplaatst ze naar het tabblad "Geannuleerd".')) return;
+Promise.all(sel.nums.map(function(num) {
+return fetch('/api/trunkrs/cancel-label', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ orderNumber: bareOrderNummer(num) }) })
+.then(function(r) { return r.json().then(function(d) { return { num: num, ok: r.ok, error: d && d.error }; }); })
+.catch(function(e) { return { num: num, ok: false, error: e.message }; });
+})).then(function(results) {
+var failed = results.filter(function(r) { return !r.ok; });
+if (failed.length) alert('Annuleren mislukt voor ' + failed.length + ' van de ' + results.length + ' label(s):\n' + failed.map(function(r) { return r.num + ': ' + (r.error || 'onbekende fout'); }).join('\n'));
+loadOrders();
+});
+}
+
+// "Markeer als bezorgd" is bedoeld voor zendingen die buiten Trunkrs' eigen
+// tracking om al bij de klant zijn (bv. zelf weggebracht of afgehaald) - een
+// handmatige overgang naar het tabblad "Verzonden", net als Sendcloud's
+// gelijknamige knop. Past niets aan bij Trunkrs zelf, enkel de lokale status.
+function bulkMarkDelivered() {
+closeLabelActionsMenu();
+var sel = getSelectedOrders();
+if (!sel.nums.length) return;
+var aantal = sel.nums.length;
+if (!confirm(aantal + ' geselecteerde order' + (aantal === 1 ? '' : 's') + ' markeren als bezorgd? Ze verschuiven dan naar het tabblad "Verzonden".')) return;
+var bareNums = sel.nums.map(bareOrderNummer);
+fetch('/api/order-status', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ orderNumbers: bareNums, status: 'verzonden' }) })
+.then(function(r) { if (!r.ok) return r.json().then(function(d) { throw new Error((d && d.error) || ('Server error: ' + r.status)); }); return r.json(); })
+.then(function() {
+sel.nums.forEach(function(n) {
+var o = allOrders.find(function(x) { return String(x._ordNummer || x.number) === String(n); });
+if (o) o._orderStatus = 'verzonden';
+});
+applyFilter();
+})
+.catch(function(e) { alert('Markeren als bezorgd mislukt: ' + e.message); });
+}
+
+function bulkPrintPakbonForLabelTab() {
+closeLabelActionsMenu();
+printPakbonnen(getSelectedOrders());
+}
+
+function bulkPrintLabelsFromMenu() {
+closeLabelActionsMenu();
+bulkPrintLabels();
 }
 
 function openLabelDetail(ordNummer) {

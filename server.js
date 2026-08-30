@@ -97,6 +97,41 @@ app.use((req, res, next) => {
 const getAuth = () => Buffer.from(API_KEY + ':' + API_SECRET).toString('base64');
 const apiHeaders = () => ({ Authorization: 'Basic ' + getAuth() });
 
+// printStatusStore/orderStatusStore/trunkrsLabelsStore worden overal
+// gelezen op het KALE ordernummer (String(order.number), bv. "80384") - nooit
+// op de "ORD"-weergavewaarde (bv. "ORD80384"). Een aantal client-aanroepen
+// stuurde per ongeluk toch die weergavewaarde mee als ordernummer, waardoor
+// de bijbehorende statuswijziging op een sleutel terechtkwam die nergens
+// meer gelezen werd - een stille no-op (gevonden en gefixt op verzoek van
+// Pieter, 2026-08-30). Deze helper normaliseert dat bij elke schrijfactie,
+// als vangnet ook voor eventuele toekomstige aanroepen die het per ongeluk
+// weer fout doen.
+function bareOrderNumberKey(n) {
+  return String(n == null ? '' : n).replace(/^ORD/i, '');
+}
+
+// Ruimt eenmalig (bij opstarten) foutief "ORD"-gesleutelde entries op die
+// hierdoor eerder al in een van deze bestanden terecht zijn gekomen. Heeft de
+// kale sleutel nog geen waarde, dan wordt de tot dusver genegeerde ORD-waarde
+// alsnog toegepast (dat herstelt de status die stilletjes verloren ging);
+// heeft de kale sleutel al een waarde, dan blijft die leidend - dat is de
+// sleutel die de app al die tijd daadwerkelijk las - en wordt de foutieve
+// entry gewoon opgeruimd.
+function migrateOrdPrefixedKeys(store, label) {
+  var changed = false;
+  Object.keys(store).forEach(function(k) {
+    if (!/^ORD/i.test(k)) return;
+    var bareKey = bareOrderNumberKey(k);
+    if (bareKey && !(bareKey in store)) {
+      console.log('[migratie] ' + label + ': "' + k + '" -> "' + bareKey + '" (' + store[k] + ')');
+      store[bareKey] = store[k];
+    }
+    delete store[k];
+    changed = true;
+  });
+  return changed;
+}
+
 // Opslaglocatie voor de status-bestanden. Standaard naast de code (net als
 // voorheen), maar via DATA_DIR is dit te verplaatsen naar een gekoppeld
 // Railway Volume zodat de data een redeploy overleeft.
@@ -120,6 +155,8 @@ function saveOrderStatus(data) {
 try { fs.writeFileSync(ORDER_STATUS_FILE, JSON.stringify(data)); } catch(e) { console.error('saveOrderStatus error:', e.message); }
 }
 let orderStatusStore = loadOrderStatus();
+if (migrateOrdPrefixedKeys(printStatusStore, 'print-status')) savePrintStatus(printStatusStore);
+if (migrateOrdPrefixedKeys(orderStatusStore, 'order-status')) saveOrderStatus(orderStatusStore);
 
 const VERZEND_COUNT_FILE = DATA_DIR + '/verzend-count.json';
 function loadVerzendCounts() {
@@ -466,7 +503,7 @@ app.post('/api/print-status', (req, res) => {
 const { orderNumbers, status } = req.body || {};
 if (!Array.isArray(orderNumbers) || !status) return res.status(400).json({ error: 'orderNumbers en status verplicht' });
 orderNumbers.forEach(n => {
-const key = String(n);
+const key = bareOrderNumberKey(n);
 const current = printStatusStore[key] || 'geen';
 if (status === 'pakbon' && current === 'beide') return;
 printStatusStore[key] = status;
@@ -484,7 +521,7 @@ const { orderNumbers, status } = req.body || {};
 const allowedStatuses = ['inkomend', 'label', 'verzonden', 'geannuleerd', 'genegeerd'];
 if (!Array.isArray(orderNumbers) || !allowedStatuses.includes(status)) return res.status(400).json({ error: 'orderNumbers en een geldige status (inkomend, label, verzonden, geannuleerd, genegeerd) zijn verplicht' });
 orderNumbers.forEach(n => {
-orderStatusStore[String(n)] = status;
+orderStatusStore[bareOrderNumberKey(n)] = status;
 });
 saveOrderStatus(orderStatusStore);
 res.json({ ok: true, orderStatus: orderStatusStore });
@@ -764,7 +801,7 @@ app.post('/api/print-stations/:id/print-label', (req, res) => {
   const station = printStationsStore[req.params.id];
   if (!station) return res.status(404).json({ error: 'Station niet gevonden.' });
   const { orderNumber } = req.body || {};
-  const key = orderNumber != null ? String(orderNumber) : '';
+  const key = bareOrderNumberKey(orderNumber);
   const tl = key && trunkrsLabelsStore[key];
   if (!tl) return res.status(404).json({ error: 'Geen Trunkrs-label bekend voor deze order.' });
   const zpl = tl.label && tl.label.zpl;
@@ -866,7 +903,7 @@ res.json({ ok: true });
 app.post('/api/trunkrs/mark-printed', (req, res) => {
 const { orderNumber, naam } = req.body || {};
 if (!orderNumber || !naam) return res.status(400).json({ error: 'orderNumber en naam verplicht' });
-const key = String(orderNumber);
+const key = bareOrderNumberKey(orderNumber);
 if (!trunkrsLabelsStore[key]) return res.status(404).json({ error: 'Geen Trunkrs-label bekend voor deze order' });
 trunkrsLabelsStore[key].printedBy = naam;
 trunkrsLabelsStore[key].printedAt = new Date().toISOString();
@@ -880,7 +917,7 @@ app.post('/api/trunkrs/cancel-label', async (req, res) => {
 if (!TRUNKRS_API_KEY) return res.status(503).json({ error: 'TRUNKRS_API_KEY is niet ingesteld (Railway env var).' });
 const { orderNumber } = req.body || {};
 if (!orderNumber) return res.status(400).json({ error: 'orderNumber verplicht' });
-const key = String(orderNumber);
+const key = bareOrderNumberKey(orderNumber);
 const entry = trunkrsLabelsStore[key];
 if (!entry || !entry.trunkrsNr) return res.status(404).json({ error: 'Geen Trunkrs-label bekend voor deze order' });
 try {
