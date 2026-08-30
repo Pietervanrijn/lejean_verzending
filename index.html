@@ -21,7 +21,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .tab-btn:hover{color:#33401f}
 .tab-btn.active{background:#fff;color:#1a1a1a;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .container{max-width:1400px;margin:30px auto;padding:0 20px}
-.toolbar{background:#fff;border-radius:12px;padding:16px 24px;margin-bottom:20px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-wrap:wrap}
+.toolbar{background:#fff;border-radius:12px;padding:16px 24px;margin-bottom:20px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-wrap:wrap}#toolbarBox{flex-direction:column;align-items:stretch}.toolbar-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .filter-label{font-size:13px;font-weight:600;color:#555;white-space:nowrap}
 .filter-select{background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:6px;padding:8px 20px;font-size:14px;font-weight:500;color:#333;cursor:pointer;outline:none;transition:border-color .2s;min-width:180px}
 #methodFilter{min-width:130px}
@@ -32,7 +32,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .print-btn:disabled{opacity:.35;cursor:not-allowed}
 .print-btn-group{position:relative;display:inline-flex;align-items:stretch}
 .print-btn-main{border-radius:6px 0 0 6px}
-.print-btn-caret{background:#33401f;color:#fff;border:none;border-left:1px solid rgba(255,255,255,.25);padding:9px 12px;border-radius:0 6px 6px 0;font-size:12px;cursor:pointer;transition:all .2s}.delete-selected-btn{background:#c0392b;color:#fff;border:none;padding:9px 20px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all .2s}.delete-selected-btn:hover:not(:disabled){background:#a4302a}.delete-selected-btn:disabled{opacity:.5;cursor:not-allowed}
+.print-btn-caret{background:#33401f;color:#fff;border:none;border-left:1px solid rgba(255,255,255,.25);padding:9px 12px;border-radius:0 6px 6px 0;font-size:12px;cursor:pointer;transition:all .2s}.delete-selected-btn{background:#c0392b;color:#fff;border:none;padding:9px 20px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all .2s}.delete-selected-btn:hover:not(:disabled){background:#a4302a}.delete-selected-btn:disabled{background:#e8e8e3;color:#8a8a80;opacity:1;cursor:not-allowed}
 .print-btn-caret:hover:not(:disabled){background:#242d15}
 .print-btn-caret:disabled{opacity:.35;cursor:not-allowed}
 .print-dropdown-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:#fff;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:240px;z-index:20;overflow:hidden}
@@ -251,6 +251,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </div>
 </div>
 <div class="toolbar" id="toolbarBox">
+<div class="toolbar-row toolbar-actions-row">
 <div class="print-btn-group">
 <button type="button" class="print-btn print-btn-main" id="printBtn" onclick="executeCurrentPrintAction()" disabled>Aanmaken: <span id="printModeLabel">Pakbonnen</span> (<span id="selCount">0</span>)</button>
 <button type="button" class="print-btn-caret" id="printCaretBtn" onclick="toggleVerzendMenu(event)" disabled><span class="print-btn-arrow">&#x25BE;</span></button>
@@ -262,6 +263,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </div>
 </div>
 <button type="button" class="delete-selected-btn" id="deleteSelectedBtn" onclick="deleteSelectedOrders()" disabled title="Verbergen uit Inkomende orders (past niets aan in Lightspeed)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Geselecteerde bestellingen verwijderen</button>
+</div>
+<div class="toolbar-row toolbar-filters-row">
 <select class="filter-select" id="methodFilter" onchange="applyFilter()">
 <option value="">Alle verzendmethodes</option>
 </select>
@@ -282,6 +285,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </div>
 
 <span class="filter-count" id="filterCount"></span>
+</div>
 </div>
 <div class="label-toolbar" id="labelToolbarBox" style="display:none">
 <select class="filter-select" id="labelSortSelect" onchange="setLabelSort(this.value)">
