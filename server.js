@@ -17,6 +17,30 @@ const TRUNKRS_API_KEY = process.env.TRUNKRS_API_KEY;
 const TRUNKRS_BASE_URL = process.env.TRUNKRS_BASE_URL || 'https://api.trunkrs.nl/api/v2';
 const trunkrsHeaders = () => ({ 'x-api-key': TRUNKRS_API_KEY, 'Content-Type': 'application/json' });
 
+// Volledige, officiële lijst van Trunkrs state.code-waarden (uit hun v2 API-
+// schema, https://github.com/Trunkrs/v2-api-documentation) - ter referentie
+// en voor de auto-transitie hieronder. DATA_RECEIVED/DATA_PROCESSED zijn
+// zuiver administratief (label aangemaakt, nog niets fysiek gebeurd).
+// SHIPMENT_SORTED is de eerste fysieke scan: de zending is binnengekomen en
+// gesorteerd op het Trunkrs-warehouse. Alles daarna (sub-depot, bij de
+// bezorger, bezorgd) impliceert dat die eerste warehouse-scan al heeft
+// plaatsgevonden. Op verzoek van Pieter (2026-08-29) is dít het moment
+// waarop een order automatisch van "Gecreëerde labels" naar "Verzonden"
+// overgaat.
+const TRUNKRS_WAREHOUSE_SCAN_OR_LATER_CODES = [
+  'SHIPMENT_SORTED',
+  'SHIPMENT_SORTED_AT_SUB_DEPOT',
+  'SHIPMENT_ACCEPTED_BY_DRIVER',
+  'SHIPMENT_DELIVERED',
+  'SHIPMENT_DELIVERED_TO_NEIGHBOR',
+  'SHIPMENT_NOT_DELIVERED'
+];
+// Uitzonderingscodes worden bewust NIET automatisch als "verzonden" geteld:
+// EXCEPTION_SHIPMENT_NOT_ARRIVED betekent expliciet dat de warehouse-scan nog
+// niet heeft plaatsgevonden, en de overige EXCEPTION_*/RETURN_*-codes vragen
+// om aparte aandacht i.p.v. stilzwijgend als "verzonden" te tellen. Zulke
+// orders blijven in "Gecreëerde labels" staan, met hun eigen statusbadge.
+
 // --- Pack & Go: aparte PIN-beveiliging (wie heeft een label geprint?) ----
 // Op verzoek van Pieter (2026-08-29): geen volledige gebruikersaccounts,
 // alleen een lichte PIN-check specifiek voor het Pack & Go-scherm, zodat
@@ -606,6 +630,50 @@ res.json({ ok: true });
 const detail = e.response ? JSON.stringify(e.response.data) : e.message;
 console.error('trunkrs/cancel-label error for order ' + orderNumber + ':', detail);
 res.status(500).json({ error: 'Label annuleren mislukt: ' + detail });
+}
+});
+
+// Haalt de actuele status (state.code) live op bij Trunkrs voor alle bekende
+// labels (behalve al geannuleerde) en werkt trunkrsLabelsStore bij. Bedoeld
+// voor de "STATUS"-kolom in "Gecreëerde labels" en "Verzonden" - Pieter wil
+// deze gevuld zien vanuit het Trunkrs-portaal i.p.v. een statische waarde.
+// Fase-2-webhooks (automatisch, zie project-notities) zijn nog niet gebouwd;
+// dit endpoint pollt op aanvraag (bv. bij het openen van een tabblad) i.p.v.
+// continu op de achtergrond, om binnen de Trunkrs-rate-limits te blijven.
+app.post('/api/trunkrs/refresh-statuses', async (req, res) => {
+if (!TRUNKRS_API_KEY) return res.status(503).json({ error: 'TRUNKRS_API_KEY is niet ingesteld (Railway env var).' });
+const keys = Object.keys(trunkrsLabelsStore).filter(function(k) {
+const entry = trunkrsLabelsStore[k];
+return entry && entry.trunkrsNr && !entry.cancelledAt;
+});
+let orderStatusChanged = false;
+try {
+await mapWithConcurrency(keys, 5, async function(key) {
+const entry = trunkrsLabelsStore[key];
+try {
+const r = await axios.get(TRUNKRS_BASE_URL + '/shipments/' + entry.trunkrsNr, { headers: trunkrsHeaders() });
+const data = (r.data && r.data.data) ? r.data.data : r.data;
+if (data && data.state) entry.state = data.state;
+// Automatische overgang "Gecreëerde labels" -> "Verzonden" zodra Trunkrs
+// de zending voor het eerst fysiek scant (binnenkomst/sortering op hun
+// warehouse) - op verzoek van Pieter (2026-08-29). Alleen vooruit, nooit
+// een al op "geannuleerd" gezette order overschrijven.
+const code = data && data.state && data.state.code;
+if (code && TRUNKRS_WAREHOUSE_SCAN_OR_LATER_CODES.indexOf(code) !== -1 &&
+orderStatusStore[key] !== 'geannuleerd' && orderStatusStore[key] !== 'verzonden') {
+orderStatusStore[key] = 'verzonden';
+orderStatusChanged = true;
+}
+} catch (e) {
+// 1 mislukte status-lookup mag de andere orders niet blokkeren.
+console.error('refresh-statuses: status ophalen mislukt voor ' + key + ':', e.response ? JSON.stringify(e.response.data) : e.message);
+}
+});
+saveTrunkrsLabels(trunkrsLabelsStore);
+if (orderStatusChanged) saveOrderStatus(orderStatusStore);
+res.json({ labels: trunkrsLabelsStore, orderStatus: orderStatusStore });
+} catch (e) {
+res.status(500).json({ error: 'Statussen ophalen mislukt: ' + e.message });
 }
 });
 

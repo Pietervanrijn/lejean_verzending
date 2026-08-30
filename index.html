@@ -76,6 +76,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .ship-icon{width:28px;height:28px;border-radius:6px;background:#33401f;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
 .ship-name{font-weight:500;color:#333;font-size:13px}
 .ship-wadden-warning .ship-icon{background:#b91c1c}
+.ship-wadden-warning .carrier-chip{background:#b91c1c1a;color:#b91c1c}
 .wadden-badge{background:#fee2e2;color:#b91c1c;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap}
 .inhoud-items{font-weight:600;color:#33401f;font-size:13px}
 .inhoud-detail{font-size:12px;color:#666;margin-top:2px}
@@ -124,8 +125,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .label-toolbar .filter-select{min-width:170px}
 .zending-status-badge{padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .zst-verwerkt{background:#e8f5e9;color:#2e7d32}
+.zst-ontvangen{background:#e3f2fd;color:#1565c0}
+.zst-onderweg{background:#fff3e0;color:#e8620c}
+.zst-bezorgd{background:#e8f5e9;color:#2e7d32}
 .zst-geannuleerd{background:#ffebee;color:#c62828}
+.zst-exception{background:#fff3e0;color:#e65100}
+.zst-retour{background:#ede7f6;color:#5e35b1}
 .zst-onbekend{background:#f5f5f5;color:#999}
+.carrier-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px 3px 6px;border-radius:12px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.carrier-icon{font-size:13px;line-height:1}
+.carrier-chip-logo{background:#fff;border:1px solid #e5e5e5;color:#333}
+.carrier-logo{height:18px;width:auto;display:block}
+.ship-wadden-warning .carrier-chip-logo{background:#fff;color:#333;border-color:#f3c9c9}
+.ship-name-sub{font-size:12px;color:#777;margin-top:3px}
+.date-range-custom{display:none;align-items:center;gap:6px}
+.date-range-custom.open{display:flex}
+.date-range-custom input[type=date]{border:1.5px solid #e0e0e0;border-radius:10px;padding:6px 10px;font-size:13px;font-family:inherit;color:#333;outline:none}
+.date-range-custom input[type=date]:focus{border-color:#f0821e}
 .tracking-link{color:#1565c0;font-weight:700;font-size:13px;text-decoration:none}
 .tracking-link:hover{text-decoration:underline}
 .printed-by{font-size:13px;color:#333}
@@ -255,15 +271,43 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <option value="naam">Klantnaam</option>
 </select>
 <select class="filter-select" id="labelDateSelect" onchange="setLabelDateRange(this.value)">
-<option value="alle">Alle</option>
 <option value="1">Vandaag</option>
+<option value="3">Afgelopen 3 dagen</option>
 <option value="7">Afgelopen 7 dagen</option>
 <option value="14" selected>Afgelopen 14 dagen</option>
-<option value="30">Afgelopen 30 dagen</option>
+<option value="aangepast">Aangepaste periode</option>
 </select>
+<div class="date-range-custom" id="labelDateCustomBox">
+<input type="date" id="labelDateFromInput" onchange="setLabelDateFrom(this.value)">
+<span>t/m</span>
+<input type="date" id="labelDateToInput" onchange="setLabelDateTo(this.value)">
+</div>
 <input type="text" class="label-search-input" id="labelSearchInput" placeholder="Zoek naar zendingen (order, klant, tracking)&hellip;" oninput="applyLabelSearch(this.value)">
 <button type="button" class="print-btn" onclick="bulkPrintLabels()">Print labels</button>
 <span class="filter-count" id="labelFilterCount"></span>
+</div>
+<div class="label-toolbar" id="verzondenToolbarBox" style="display:none">
+<select class="filter-select" id="verzondenSortSelect" onchange="setVerzondenSort(this.value)">
+<option value="datum_desc">Datum label (nieuwste eerst)</option>
+<option value="datum_asc">Datum label (oudste eerst)</option>
+<option value="order">Ordernummer</option>
+<option value="naam">Klantnaam</option>
+</select>
+<select class="filter-select" id="verzondenDateSelect" onchange="setVerzondenDateRange(this.value)">
+<option value="1">Vandaag</option>
+<option value="3">Afgelopen 3 dagen</option>
+<option value="7">Afgelopen 7 dagen</option>
+<option value="14" selected>Afgelopen 14 dagen</option>
+<option value="aangepast">Aangepaste periode</option>
+</select>
+<div class="date-range-custom" id="verzondenDateCustomBox">
+<input type="date" id="verzondenDateFromInput" onchange="setVerzondenDateFrom(this.value)">
+<span>t/m</span>
+<input type="date" id="verzondenDateToInput" onchange="setVerzondenDateTo(this.value)">
+</div>
+<input type="text" class="label-search-input" id="verzondenSearchInput" placeholder="Zoek naar zendingen (order, klant, tracking)&hellip;" oninput="applyVerzondenSearch(this.value)">
+<button type="button" class="print-btn" onclick="refreshTrunkrsStatuses()">Statussen verversen</button>
+<span class="filter-count" id="verzondenFilterCount"></span>
 </div>
 <div id="errorBox"></div>
 <div id="ordersContainer">
@@ -343,6 +387,13 @@ var currentTab = 'inkomend';
 var labelSearchQuery = '';
 var labelSortMode = 'datum_desc';
 var labelDateRange = '14';
+var labelDateFrom = '';
+var labelDateTo = '';
+var verzondenSearchQuery = '';
+var verzondenSortMode = 'datum_desc';
+var verzondenDateRange = '14';
+var verzondenDateFrom = '';
+var verzondenDateTo = '';
 // Let op: escapeHtml() wordt verderop in dit bestand gedefinieerd (bij
 // buildPakbonHtml) en hier ook gebruikt voor de orders-tabel — klantgegevens
 // (naam, adres, verzendmethode...) komen uit orders die klanten zelf
@@ -369,6 +420,9 @@ var toolbar = document.getElementById('toolbarBox');
 if (toolbar) toolbar.style.display = (tab === 'inkomend') ? 'flex' : 'none';
 var labelToolbar = document.getElementById('labelToolbarBox');
 if (labelToolbar) labelToolbar.style.display = (tab === 'label') ? 'flex' : 'none';
+var verzondenToolbar = document.getElementById('verzondenToolbarBox');
+if (verzondenToolbar) verzondenToolbar.style.display = (tab === 'verzonden') ? 'flex' : 'none';
+if (tab === 'label' || tab === 'verzonden') refreshTrunkrsStatuses();
 if (isPackGo) {
 updatePackGoGateVisibility();
 var input = document.getElementById('packGoScanInput');
@@ -482,6 +536,10 @@ sel.appendChild(opt);
 function applyFilter() {
 if (currentTab === 'label') {
 refreshLabelView();
+return;
+}
+if (currentTab === 'verzonden') {
+refreshVerzondenView();
 return;
 }
 var selectedMethod = document.getElementById('methodFilter').value;
@@ -608,6 +666,47 @@ var gradient = 'linear-gradient(' + angle + ', ' + stops + ')';
 return '<div class="flag-icon" style="background:' + gradient + '" title="' + countryCode + '"></div>';
 }
 
+// Herkenbare badge (logo + naam) per vervoerder, gebruikt in alle
+// tabbladen waar een verzendmethode getoond wordt (Inkomend, Gecreëerde
+// labels, Verzonden, Geannuleerd). Trunkrs, PostNL en Chill-Bill tonen hun
+// echte, door Pieter aangeleverde merklogo. Voor Afhalen en Overig (geen
+// vervoerder of onbekend) is er geen logo beschikbaar; die gebruiken nog
+// een consistent gekleurd icoon.
+var CARRIER_LOGOS = {
+trunkrs: 'data:image/png;base64,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',
+postnl: 'data:image/png;base64,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',
+chillbill: 'data:image/png;base64,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'
+};
+var CARRIER_INFO = {
+trunkrs: { naam: 'Trunkrs', logo: CARRIER_LOGOS.trunkrs },
+postnl: { naam: 'PostNL', logo: CARRIER_LOGOS.postnl },
+chillbill: { naam: 'Chill-Bill', logo: CARRIER_LOGOS.chillbill },
+afhalen: { naam: 'Afhalen', kleur: '#555555', icoon: '&#127968;' },
+onbekend: { naam: 'Overig', kleur: '#888888', icoon: '&#128666;' }
+};
+
+function detectCarrierKey(shipMethod) {
+if (isPostNLMethod(shipMethod)) return 'postnl';
+if (/[A-Z]{2,}/.test(shipMethod || '')) return 'chillbill';
+if (isTrunkrsMethod(shipMethod)) return 'trunkrs';
+return 'onbekend';
+}
+
+// productLabelOverride: als er al een preciezere naam bekend is (bv. het
+// daadwerkelijk geboekte Trunkrs-product "Trunkrs Same Day Delivery" i.p.v.
+// alleen de ruwe verzendmethode-tekst), gebruik die als subtekst.
+function shipMethodBadgeHtml(order, productLabelOverride) {
+var isPickup = !!(order && (order.shipmentIsPickup || order._isPickup));
+var rawMethod = (order && order._shippingMethod) || (isPickup ? 'Afhalen bij LeJean in Leidschendam' : 'Onbekend');
+var key = isPickup ? 'afhalen' : detectCarrierKey(rawMethod);
+var info = CARRIER_INFO[key] || CARRIER_INFO.onbekend;
+var subLabel = productLabelOverride || rawMethod;
+var chipHtml = info.logo
+  ? '<div class="carrier-chip carrier-chip-logo"><img class="carrier-logo" src="' + info.logo + '" alt="' + escapeHtml(info.naam) + '"><span>' + escapeHtml(info.naam) + '</span></div>'
+  : '<div class="carrier-chip" style="background:' + info.kleur + '1a;color:' + info.kleur + '"><span class="carrier-icon">' + info.icoon + '</span>' + escapeHtml(info.naam) + '</div>';
+return chipHtml + '<div class="ship-name-sub">' + escapeHtml(subLabel) + '</div>';
+}
+
 function renderOrders(orders) {
 var c = document.getElementById('ordersContainer');
 if (!orders.length) {
@@ -652,7 +751,8 @@ var adresSafe = escapeHtml([[postcode,city].filter(Boolean).join(', '), countryC
 
 var printBadge = '<button type="button" class="geprint-badge geprint-' + printStatus + '" onclick="toggleBeide(\'' + ordNummerSafe + '\',\'' + printStatus + '\')" title="Klik om te wisselen tussen Enkel pakbon en Beide geprint">' + printLabel + '</button>';
 
-return '<tr><td><input type="checkbox" class="order-checkbox" data-id="' + idSafe + '" data-num="' + ordNummerSafe + '" onchange="updateSelection()"></td><td><div class="shop-status-icon">&#10003;</div></td><td><span class="status-text">Wacht op verzending</span></td><td><a class="order-num-link" href="#">' + ordNummerSafe + '</a><div class="order-date">' + dateSafe + '</div></td><td><div class="' + (hasShipWarning ? "ship-method-wrap ship-wadden-warning" : "ship-method-wrap") + '"><div class="ship-icon">' + (hasShipWarning ? "&#9888;" : "&#x1F69A;") + '</div><span class="ship-name">' + shipSafe + '</span>' + shipWarningBadgeHtml + '</div></td><td><div class="inhoud-items">' + itemLabel + '</div>' + (qtyText ? '<div class="inhoud-detail">' + qtyText + '</div>' : '') + (valText ? '<div class="inhoud-detail">' + valText + '</div>' : '') + '</td><td><div class="klant-naam">' + (flag ? flag : '') + klantSafe + '</div>' + (email ? '<div class="klant-email">' + emailSafe + '</div>' : '') + ((postcode||city||countryCode) ? '<div class="klant-adres">' + adresSafe + '</div>' : '') + '</td><td>' + printBadge + '</td></tr>';
+var statusLabel = currentTab === 'geannuleerd' ? 'Geannuleerd' : (currentTab === 'verzonden' ? 'Verzonden' : 'Wacht op verzending');
+return '<tr><td><input type="checkbox" class="order-checkbox" data-id="' + idSafe + '" data-num="' + ordNummerSafe + '" onchange="updateSelection()"></td><td><div class="shop-status-icon">&#10003;</div></td><td><span class="status-text">' + escapeHtml(statusLabel) + '</span></td><td><a class="order-num-link" href="#">' + ordNummerSafe + '</a><div class="order-date">' + dateSafe + '</div></td><td><div class="' + (hasShipWarning ? "ship-method-wrap ship-wadden-warning" : "ship-method-wrap") + '">' + shipMethodBadgeHtml(o) + shipWarningBadgeHtml + '</div></td><td><div class="inhoud-items">' + itemLabel + '</div>' + (qtyText ? '<div class="inhoud-detail">' + qtyText + '</div>' : '') + (valText ? '<div class="inhoud-detail">' + valText + '</div>' : '') + '</td><td><div class="klant-naam">' + (flag ? flag : '') + klantSafe + '</div>' + (email ? '<div class="klant-email">' + emailSafe + '</div>' : '') + ((postcode||city||countryCode) ? '<div class="klant-adres">' + adresSafe + '</div>' : '') + '</td><td>' + printBadge + '</td></tr>';
 }).join('');
 c.innerHTML = '<div class="orders-table-wrap"><table class="orders-table"><thead><tr><th><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onchange="toggleSelectAll(this)" title="Alles selecteren"></th><th>SHOP STATUS</th><th>STATUS</th><th>ORDER</th><th>VERZENDMETHODE</th><th>INHOUD VAN DE BESTELLING</th><th>KLANT</th><th>GEPRINT</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
@@ -964,7 +1064,7 @@ resultBox.innerHTML =
 '<div class="packgo-card">' +
 '<div class="packgo-card-head">' +
 '<div><div class="packgo-order-num">' + escapeHtml(order._ordNummer || order.number) + '</div>' +
-'<div class="packgo-ship-line"><span class="ship-icon">&#x1F69A;</span><span class="ship-name">' + shipSafe + '</span></div></div>' +
+'<div class="packgo-ship-line">' + shipMethodBadgeHtml(order) + '</div></div>' +
 '<div><div class="packgo-klant">' + (flag || '') + klant + '</div></div>' +
 '</div>' +
 '<table class="packgo-items-table"><thead><tr><th>Item</th><th>SKU</th><th>Aantal</th></tr></thead><tbody>' + rows + '</tbody></table>' +
@@ -1268,15 +1368,79 @@ cleanup();
 // "Gecreëerde labels": eigen weergave (kolommen/zoeken/sorteren/datumfilter)
 // specifiek voor dit tabblad, i.p.v. de generieke orders-tabel.
 // ============================================================================
-var TRUNKRS_STATE_LABELS = { DATA_PROCESSED: 'Verwerkt' };
-// Let op: dit is de enige state.code die tot nu toe echt bevestigd is tegen
-// de live Trunkrs API (2026-08-29, zie project-notities). Onbekende/nieuwe
-// codes tonen we gewoon met de ruwe waarde i.p.v. te gokken naar een
-// vertaling.
+// Alleen DATA_RECEIVED/DATA_PROCESSED/CANCELLED zijn tot nu toe echt bevestigd
+// tegen de live Trunkrs API (zie project-notities). DATA_RECEIVED/
+// DATA_PROCESSED zijn dat, en zijn ook empirisch bevestigd. De overige codes
+// hieronder komen rechtstreeks uit Trunkrs' eigen publieke API-schema
+// (https://github.com/Trunkrs/v2-api-documentation, State.code-enum) - dus
+// wel officieel gedocumenteerd, maar nog niet met eigen ogen gezien op een
+// echte zending die verder is dan het label-moment. Zodra dat gebeurt kunnen
+// de vertalingen hieronder zo nodig aangescherpt worden.
+// SHIPMENT_SORTED is de eerste fysieke scan bij Trunkrs (binnenkomst +
+// sortering op hun warehouse) - dit is het moment waarop een order
+// automatisch van "Gecreëerde labels" naar "Verzonden" overgaat, zie server.js.
+var TRUNKRS_STATE_LABELS = {
+DATA_RECEIVED: { label: 'Ontvangen door Trunkrs', cls: 'zst-ontvangen' },
+DATA_PROCESSED: { label: 'Verwerkt door Trunkrs', cls: 'zst-verwerkt' },
+SHIPMENT_SORTED: { label: 'Aangekomen bij Trunkrs (gesorteerd)', cls: 'zst-onderweg' },
+SHIPMENT_SORTED_AT_SUB_DEPOT: { label: 'Gesorteerd bij regiodepot', cls: 'zst-onderweg' },
+SHIPMENT_ACCEPTED_BY_DRIVER: { label: 'Bij bezorger, onderweg', cls: 'zst-onderweg' },
+SHIPMENT_DELIVERED: { label: 'Bezorgd', cls: 'zst-bezorgd' },
+SHIPMENT_DELIVERED_TO_NEIGHBOR: { label: 'Bezorgd bij buren', cls: 'zst-bezorgd' },
+SHIPMENT_NOT_DELIVERED: { label: 'Niet bezorgd', cls: 'zst-exception' },
+EXCEPTION_SHIPMENT_NOT_ARRIVED: { label: 'Nog niet aangekomen bij Trunkrs', cls: 'zst-exception' },
+EXCEPTION_SHIPMENT_MISS_SORTED: { label: 'Verkeerd gesorteerd', cls: 'zst-exception' },
+EXCEPTION_SHIPMENT_DECLINED_BY_DRIVER: { label: 'Geweigerd door bezorger', cls: 'zst-exception' },
+EXCEPTION_SHIPMENT_MISSING: { label: 'Vermist', cls: 'zst-exception' },
+EXCEPTION_SHIPMENT_LOST: { label: 'Kwijtgeraakt', cls: 'zst-exception' },
+EXCEPTION_SHIPMENT_CANCELLED_BY_SENDER: { label: 'Geannuleerd (door afzender)', cls: 'zst-geannuleerd' },
+EXCEPTION_SHIPMENT_CANCELLED_BY_TRUNKRS: { label: 'Geannuleerd (door Trunkrs)', cls: 'zst-geannuleerd' },
+EXCEPTION_SHIPMENT_INVESTIGATE: { label: 'In onderzoek bij Trunkrs', cls: 'zst-exception' },
+RETURN_SHIPMENT_TO_SENDER: { label: 'Retour naar afzender', cls: 'zst-retour' },
+RETURN_ASSIGNED_TO_PICKUP: { label: 'Retour: ophalen ingepland', cls: 'zst-retour' },
+RETURN_ACCEPTED_BY_PICKUP_DRIVER: { label: 'Retour: opgehaald door bezorger', cls: 'zst-retour' },
+RETURN_ACCEPTED_BY_SENDER: { label: 'Retour: ontvangen door afzender', cls: 'zst-retour' },
+CANCELLED: { label: 'Geannuleerd', cls: 'zst-geannuleerd' }
+};
+function humanizeStateCode(code) {
+return String(code).toLowerCase().replace(/_/g, ' ').replace(/^./, function(c){ return c.toUpperCase(); });
+}
 function formatZendingStatus(code) {
 if (!code) return { label: 'Onbekend', cls: 'zst-onbekend' };
-var label = TRUNKRS_STATE_LABELS[code] || code;
-return { label: label, cls: TRUNKRS_STATE_LABELS[code] ? 'zst-verwerkt' : 'zst-onbekend' };
+if (TRUNKRS_STATE_LABELS[code]) return TRUNKRS_STATE_LABELS[code];
+// Vangnet voor eventuele toekomstige/nieuwe Trunkrs-codes die niet in de
+// lijst hierboven staan: gok op basis van de codenaam zelf, zonder dit als
+// bevestigd te presenteren.
+if (/DELIVER|BEZORG/i.test(code)) return { label: 'Bezorgd', cls: 'zst-bezorgd' };
+if (/CANCEL|ANNULEER/i.test(code)) return { label: 'Geannuleerd', cls: 'zst-geannuleerd' };
+if (/RETURN|RETOUR/i.test(code)) return { label: 'Retour', cls: 'zst-retour' };
+if (/EXCEPTION/i.test(code)) return { label: 'Uitzondering', cls: 'zst-exception' };
+if (/PICK|TRANSIT|ROUTE|SORT|ONDERWEG/i.test(code)) return { label: 'Onderweg', cls: 'zst-onderweg' };
+return { label: humanizeStateCode(code), cls: 'zst-onbekend' };
+}
+
+// Vraagt de server om voor alle bekende Trunkrs-labels de actuele status op
+// te halen bij Trunkrs zelf (i.p.v. de status van het moment van aanmaken te
+// blijven tonen). Wordt aangeroepen bij het openen van "Gecreëerde labels"
+// of "Verzonden"; ook handmatig te herhalen via de "Statussen verversen"-knop.
+function refreshTrunkrsStatuses() {
+fetch('/api/trunkrs/refresh-statuses', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
+var labels = data.labels || {};
+var statuses = data.orderStatus || {};
+// Let op: trunkrsLabelsStore/orderStatusStore zijn server-side altijd
+// gesleuteld op het kale ordernummer (o.number, bv. "80384"), niet op
+// o._ordNummer (bv. "ORD80384") - anders mist deze lookup alles.
+allOrders.forEach(function(o) {
+var key = String(o.number);
+if (labels[key]) o._trunkrsLabel = labels[key];
+// Kan de order automatisch van "Gecreëerde labels" naar "Verzonden"
+// verplaatsen (zie server: eerste warehouse-scan bij Trunkrs) - zonder
+// een volledige paginaherlading.
+if (statuses[key]) o._orderStatus = statuses[key];
+});
+if (currentTab === 'label') refreshLabelView();
+if (currentTab === 'verzonden') refreshVerzondenView();
+}).catch(function(e) { console.error('refreshTrunkrsStatuses:', e.message); });
 }
 
 function formatLabelDateTime(iso) {
@@ -1309,13 +1473,27 @@ order: function(a,b){ return String(a._ordNummer||'').localeCompare(String(b._or
 naam: function(a,b){ return String(a._klant||'').localeCompare(String(b._klant||'')); }
 };
 
+// Gedeeld datumbereik-filter voor "Gecreëerde labels" en "Verzonden" - zelfde
+// opties als Sendcloud: Vandaag, Afgelopen 3/7/14 dagen, Aangepaste periode.
+// "Vandaag" = kalenderdag (vanaf 00:00), niet de laatste 24 rollende uren.
+function dateRangeMatches(timestampMs, rangeValue, fromStr, toStr) {
+if (!rangeValue) return true;
+if (rangeValue === 'aangepast') {
+if (!fromStr && !toStr) return true;
+var from = fromStr ? new Date(fromStr + 'T00:00:00').getTime() : -Infinity;
+var to = toStr ? new Date(toStr + 'T23:59:59').getTime() : Infinity;
+return timestampMs >= from && timestampMs <= to;
+}
+var days = parseInt(rangeValue, 10);
+if (isNaN(days)) return true;
+var startOfToday = new Date(); startOfToday.setHours(0,0,0,0);
+var cutoff = startOfToday.getTime() - (days - 1) * 86400000;
+return timestampMs >= cutoff;
+}
+
 function getLabelFilteredOrders() {
 var list = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'label'; });
-if (labelDateRange && labelDateRange !== 'alle') {
-var days = parseInt(labelDateRange, 10);
-var cutoff = Date.now() - days * 86400000;
-list = list.filter(function(o){ var tl = o._trunkrsLabel; var t = tl && tl.createdAt ? new Date(tl.createdAt).getTime() : 0; return t >= cutoff; });
-}
+list = list.filter(function(o){ var tl = o._trunkrsLabel; var t = tl && tl.createdAt ? new Date(tl.createdAt).getTime() : 0; return dateRangeMatches(t, labelDateRange, labelDateFrom, labelDateTo); });
 if (labelSearchQuery) {
 var q = labelSearchQuery.toLowerCase();
 list = list.filter(function(o){
@@ -1329,16 +1507,104 @@ return list.slice().sort(LABEL_SORT_COMPARATORS[labelSortMode] || LABEL_SORT_COM
 
 function applyLabelSearch(value) { labelSearchQuery = value || ''; refreshLabelView(); }
 function setLabelSort(value) { labelSortMode = value; refreshLabelView(); }
-function setLabelDateRange(value) { labelDateRange = value; refreshLabelView(); }
+function setLabelDateRange(value) {
+labelDateRange = value;
+var box = document.getElementById('labelDateCustomBox');
+if (box) box.classList.toggle('open', value === 'aangepast');
+refreshLabelView();
+}
+function setLabelDateFrom(value) { labelDateFrom = value || ''; refreshLabelView(); }
+function setLabelDateTo(value) { labelDateTo = value || ''; refreshLabelView(); }
 
 function refreshLabelView() {
 var filtered = getLabelFilteredOrders();
 var total = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'label'; }).length;
 document.getElementById('count').textContent = total;
 var fc = document.getElementById('labelFilterCount');
-if (fc) fc.textContent = (labelSearchQuery || labelDateRange !== 'alle') ? filtered.length + ' van ' + total + ' labels' : total + ' labels totaal';
+if (fc) fc.textContent = (labelSearchQuery || labelDateRange !== 'aangepast' || labelDateFrom || labelDateTo) ? filtered.length + ' van ' + total + ' labels' : total + ' labels totaal';
 renderLabelOrders(filtered);
 updateSelection();
+}
+
+// ============================================================================
+// "Verzonden": zelfde opzet als "Gecreëerde labels" (zoeken/sorteren/
+// datumfilter/live Trunkrs-status), specifiek voor orders met status
+// "verzonden" i.p.v. de generieke orders-tabel.
+// ============================================================================
+var VERZONDEN_SORT_COMPARATORS = LABEL_SORT_COMPARATORS;
+
+function getVerzondenFilteredOrders() {
+var list = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'verzonden'; });
+list = list.filter(function(o){ var tl = o._trunkrsLabel; var t = tl && tl.createdAt ? new Date(tl.createdAt).getTime() : 0; return dateRangeMatches(t, verzondenDateRange, verzondenDateFrom, verzondenDateTo); });
+if (verzondenSearchQuery) {
+var q = verzondenSearchQuery.toLowerCase();
+list = list.filter(function(o){
+var tl = o._trunkrsLabel || {};
+var hay = [o._ordNummer, o.number, o._klant, o.email, tl.trunkrsNr].filter(Boolean).join(' ').toLowerCase();
+return hay.indexOf(q) !== -1;
+});
+}
+return list.slice().sort(VERZONDEN_SORT_COMPARATORS[verzondenSortMode] || VERZONDEN_SORT_COMPARATORS.datum_desc);
+}
+
+function applyVerzondenSearch(value) { verzondenSearchQuery = value || ''; refreshVerzondenView(); }
+function setVerzondenSort(value) { verzondenSortMode = value; refreshVerzondenView(); }
+function setVerzondenDateRange(value) {
+verzondenDateRange = value;
+var box = document.getElementById('verzondenDateCustomBox');
+if (box) box.classList.toggle('open', value === 'aangepast');
+refreshVerzondenView();
+}
+function setVerzondenDateFrom(value) { verzondenDateFrom = value || ''; refreshVerzondenView(); }
+function setVerzondenDateTo(value) { verzondenDateTo = value || ''; refreshVerzondenView(); }
+
+function refreshVerzondenView() {
+var filtered = getVerzondenFilteredOrders();
+var total = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'verzonden'; }).length;
+document.getElementById('count').textContent = total;
+var fc = document.getElementById('verzondenFilterCount');
+if (fc) fc.textContent = (verzondenSearchQuery || verzondenDateRange !== 'aangepast' || verzondenDateFrom || verzondenDateTo) ? filtered.length + ' van ' + total + ' verzonden orders' : total + ' verzonden orders totaal';
+renderVerzondenOrders(filtered);
+updateSelection();
+}
+
+function renderVerzondenOrders(orders) {
+var c = document.getElementById('ordersContainer');
+if (!orders.length) {
+c.innerHTML = '<div class="empty"><div class="empty-icon">&#9989;</div><p>Geen verzonden orders gevonden</p></div>';
+return;
+}
+var rows = orders.map(function(o) {
+var tl = o._trunkrsLabel || {};
+var ordNummerRaw = String(o._ordNummer || o.number);
+var ordNummer = escapeHtml(ordNummerRaw);
+var klant = escapeHtml(o._klant || [o.firstname, o.middlename, o.lastname].filter(Boolean).join(' ') || o.email || 'Onbekend');
+var email = o.email ? escapeHtml(o.email) : '';
+var serviceLabel = tl.service === 'SAME_DAY' ? 'Trunkrs Same Day Delivery' : (tl.service === 'SAME_DAY_FROZEN_FOOD' ? 'Trunkrs Same Day Frozen' : (o._shippingMethod || '-'));
+var countryCode = ((o.addressShippingCountry && (o.addressShippingCountry.code || o.addressShippingCountry.code3)) || '').toUpperCase();
+var countryTitle = escapeHtml((o.addressShippingCountry && o.addressShippingCountry.title) || countryCode || '-');
+var flag = getFlagEmoji(countryCode);
+var zst = formatZendingStatus(tl.state && tl.state.code);
+var postcode = o.addressShippingZipcode || o.addressBillingZipcode || '';
+var trackUrl = trunkrsTrackingUrl(tl.trunkrsNr, postcode);
+var trackHtml = tl.trunkrsNr ? (trackUrl ? '<a class="tracking-link" href="' + trackUrl + '" target="_blank" rel="noopener">' + escapeHtml(tl.trunkrsNr) + '</a>' : escapeHtml(tl.trunkrsNr)) : '-';
+var datumLabel = escapeHtml(formatLabelDateTime(tl.createdAt));
+return '<tr>' +
+'<td><input type="checkbox" class="order-checkbox" data-id="' + escapeHtml(o.id) + '" data-num="' + ordNummer + '" onchange="updateSelection()"></td>' +
+'<td><span class="zending-status-badge ' + zst.cls + '">' + escapeHtml(zst.label) + '</span></td>' +
+'<td><a class="order-num-link" href="#">' + ordNummer + '</a></td>' +
+'<td><div class="klant-naam">' + (flag || '') + klant + '</div>' + (email ? '<div class="klant-email">' + email + '</div>' : '') + '</td>' +
+'<td>' + shipMethodBadgeHtml(o, serviceLabel) + '</td>' +
+'<td><div class="klant-adres">' + (flag || '') + countryTitle + '</div></td>' +
+'<td>' + trackHtml + '</td>' +
+'<td>' + datumLabel + '</td>' +
+'<td><button type="button" class="eye-btn" title="Labeldetails bekijken" onclick="openLabelDetail(\'' + ordNummer + '\')">&#128065;</button></td>' +
+'</tr>';
+}).join('');
+c.innerHTML = '<div class="orders-table-wrap"><table class="orders-table"><thead><tr>' +
+'<th><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onchange="toggleSelectAll(this)" title="Alles selecteren"></th>' +
+'<th>STATUS</th><th>ORDERNUMMER</th><th>NAAM</th><th>VERZENDMETHODE</th><th>LAND</th><th>TRACKING NUMMER</th><th>DATUM LABEL</th><th></th>' +
+'</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 function renderLabelOrders(orders) {
@@ -1368,7 +1634,7 @@ return '<tr>' +
 '<td><span class="zending-status-badge ' + zst.cls + '">' + escapeHtml(zst.label) + '</span></td>' +
 '<td><a class="order-num-link" href="#">' + ordNummer + '</a></td>' +
 '<td><div class="klant-naam">' + (flag || '') + klant + '</div>' + (email ? '<div class="klant-email">' + email + '</div>' : '') + '</td>' +
-'<td><div class="ship-method-wrap"><div class="ship-icon">&#x1F69A;</div><span class="ship-name">' + escapeHtml(serviceLabel) + '</span></div></td>' +
+'<td><div class="ship-method-wrap">' + shipMethodBadgeHtml(o, serviceLabel) + '</div></td>' +
 '<td><div class="klant-adres">' + (flag || '') + countryTitle + '</div></td>' +
 '<td>' + trackHtml + '</td>' +
 '<td>' + datumLabel + '</td>' +
