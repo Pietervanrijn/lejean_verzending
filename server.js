@@ -66,7 +66,14 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
+// De print-agent (het kleine programmaatje dat op elk inpakstation draait,
+// zie print-stations verderop) heeft geen kantoor-Basic-Auth-wachtwoord -
+// die draait onbeheerd op een gedeelde pc. Elk station krijgt in plaats
+// daarvan een eigen smal token (alleen bruikbaar voor zijn eigen printjobs).
+// Daarom slaan deze paden de Basic Auth hieronder over en hebben ze hun
+// eigen requirePrintAgentToken-check (zie bij de print-station routes).
 app.use((req, res, next) => {
+  if (req.path.indexOf('/api/print-agent/') === 0) return next();
   if (!APP_USERNAME || !APP_PASSWORD) {
     console.error('APP_USERNAME/APP_PASSWORD zijn niet ingesteld: alle verzoeken worden geweigerd. Zet deze env vars in Railway.');
     return res.status(503).send('Server niet geconfigureerd: ontbrekende inloggegevens.');
@@ -161,6 +168,55 @@ function loadPackgoMedewerkers() {
 function savePackgoMedewerkers(data) {
   try { fs.writeFileSync(PACKGO_MEDEWERKERS_FILE, JSON.stringify(data)); } catch(e) { console.error('savePackgoMedewerkers error:', e.message); }
 }
+// --- Afdrukopties: inpakstations + print-agent ---------------------------
+// Elk inpakstation heeft zijn eigen (netwerk)labelprinter (Zebra/Intermec,
+// aangesproken via IP - geen normale Windows/Mac-printerinstallatie). Omdat
+// die printers alleen bereikbaar zijn vanaf het eigen lokale netwerk, en
+// Railway in de cloud draait, kan de app een label niet rechtstreeks naar
+// zo'n printer sturen. Elk station draait daarom een klein, zelf-
+// gegenereerd Node-scriptje (de "print-agent", te downloaden vanuit het
+// instellingenpaneel) dat naar deze app toe polt, en de rauwe ZPL-labeldata
+// (die Trunkrs al meelevert naast de PDF, zie trunkrsLabelsStore) via een
+// kale TCP-verbinding (poort 9100, standaard voor labelprinters) naar zijn
+// eigen printer-IP doorstuurt. Dit is bewust dezelfde soort opzet als
+// Sendcloud's eigen download-print-app.
+const PRINT_STATIONS_FILE = DATA_DIR + '/print-stations.json';
+function loadPrintStations() {
+  try { return JSON.parse(fs.readFileSync(PRINT_STATIONS_FILE, 'utf8')); } catch(e) { return {}; }
+}
+function savePrintStations(data) {
+  try { fs.writeFileSync(PRINT_STATIONS_FILE, JSON.stringify(data)); } catch(e) { console.error('savePrintStations error:', e.message); }
+}
+let printStationsStore = loadPrintStations();
+
+const PRINT_JOBS_FILE = DATA_DIR + '/print-jobs.json';
+function loadPrintJobs() {
+  try { return JSON.parse(fs.readFileSync(PRINT_JOBS_FILE, 'utf8')); } catch(e) { return {}; }
+}
+function savePrintJobs(data) {
+  try { fs.writeFileSync(PRINT_JOBS_FILE, JSON.stringify(data)); } catch(e) { console.error('savePrintJobs error:', e.message); }
+}
+let printJobsStore = loadPrintJobs();
+
+// Zoekt het station dat bij dit Bearer-token hoort. Losse, lichte check t.o.v.
+// de kantoor-Basic-Auth hierboven - een print-agent-token mag alleen zijn
+// eigen printjobs ophalen/afvinken, verder niets in de app.
+function findStationByToken(token) {
+  if (!token) return null;
+  for (const id in printStationsStore) {
+    if (safeEqual(printStationsStore[id].token, token)) return printStationsStore[id];
+  }
+  return null;
+}
+function requirePrintAgentToken(req, res, next) {
+  const header = req.headers.authorization || '';
+  const [scheme, token] = header.split(' ');
+  const station = scheme === 'Bearer' && token ? findStationByToken(token) : null;
+  if (!station) return res.status(401).json({ error: 'Onbekend of ongeldig station-token.' });
+  req.printStation = station;
+  next();
+}
+
 let packgoMedewerkersStore = loadPackgoMedewerkers();
 if (!packgoMedewerkersStore) {
   packgoMedewerkersStore = {};
@@ -549,6 +605,210 @@ res.status(500).json({ error: 'Trunkrs-label aanmaken mislukt: ' + detail });
 
 app.get('/api/trunkrs/labels', (req, res) => {
 res.json({ labels: trunkrsLabelsStore });
+});
+
+// --- Instellingenpaneel: inpakstations beheren (Afdrukopties) ------------
+// Zit achter dezelfde HTTP Basic Auth als de rest van het instellingenpaneel
+// (packgo-medewerkers hierboven volgt hetzelfde patroon).
+app.get('/api/settings/print-stations', (req, res) => {
+  const stations = Object.keys(printStationsStore).sort(function(a, b) {
+    return (printStationsStore[a].naam || '').localeCompare(printStationsStore[b].naam || '');
+  }).map(function(id) {
+    const s = printStationsStore[id];
+    // Token bewust niet meegeven in de lijst - alleen relevant voor de
+    // print-agent zelf, die zit in het gegenereerde scriptje (zie
+    // agent-script-route hieronder).
+    return { id: s.id, naam: s.naam, printerIp: s.printerIp, printerPort: s.printerPort, createdAt: s.createdAt, lastSeenAt: s.lastSeenAt || null };
+  });
+  res.json({ stations: stations });
+});
+
+app.post('/api/settings/print-stations', (req, res) => {
+  const { naam, printerIp, printerPort } = req.body || {};
+  const naamTrimmed = naam != null ? String(naam).trim() : '';
+  const ipTrimmed = printerIp != null ? String(printerIp).trim() : '';
+  const poort = printerPort ? parseInt(printerPort, 10) : 9100;
+  if (!naamTrimmed || !ipTrimmed) return res.status(400).json({ error: 'Naam en printer-IP zijn verplicht.' });
+  if (!Number.isInteger(poort) || poort < 1 || poort > 65535) return res.status(400).json({ error: 'Poort moet een getal tussen 1 en 65535 zijn.' });
+  const id = crypto.randomUUID();
+  const token = crypto.randomBytes(24).toString('hex');
+  printStationsStore[id] = {
+    id: id,
+    naam: naamTrimmed,
+    printerIp: ipTrimmed,
+    printerPort: poort,
+    token: token,
+    createdAt: new Date().toISOString(),
+    lastSeenAt: null
+  };
+  savePrintStations(printStationsStore);
+  res.json({ ok: true, id: id, naam: naamTrimmed, printerIp: ipTrimmed, printerPort: poort });
+});
+
+app.delete('/api/settings/print-stations/:id', (req, res) => {
+  const id = req.params.id;
+  if (!printStationsStore[id]) return res.status(404).json({ error: 'Station niet gevonden.' });
+  delete printStationsStore[id];
+  savePrintStations(printStationsStore);
+  // Openstaande printjobs voor dit station opruimen - niemand zal ze nog ophalen.
+  Object.keys(printJobsStore).forEach(function(jobId) {
+    if (printJobsStore[jobId].stationId === id) delete printJobsStore[jobId];
+  });
+  savePrintJobs(printJobsStore);
+  res.json({ ok: true });
+});
+
+// Genereert het kleine print-agent-scriptje voor 1 station, met het eigen
+// token/printer-IP er al in verwerkt - de medewerker hoeft alleen nog maar
+// "node print-agent.js" te draaien op die pc. Puur Node core modules
+// (http/https/net), geen npm install nodig. Kan altijd opnieuw gedownload
+// worden (bv. na een IP-wijziging van de printer) - het token wordt niet
+// ingetrokken bij het downloaden.
+app.get('/api/settings/print-stations/:id/agent-script', (req, res) => {
+  const s = printStationsStore[req.params.id];
+  if (!s) return res.status(404).send('Station niet gevonden.');
+  const baseUrl = req.protocol + '://' + req.get('host');
+  const script = buildPrintAgentScript({ baseUrl: baseUrl, token: s.token, naam: s.naam, printerIp: s.printerIp, printerPort: s.printerPort });
+  const safeNaam = s.naam.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'station';
+  res.set('Content-Type', 'application/javascript; charset=utf-8');
+  res.set('Content-Disposition', 'attachment; filename="print-agent-' + safeNaam + '.js"');
+  res.send(script);
+});
+
+function buildPrintAgentScript(cfg) {
+  return [
+    '// LJ Verzending — print-agent voor station "' + cfg.naam + '"',
+    '// Automatisch gegenereerd - draai dit met: node print-agent.js',
+    '// Geen npm install nodig (gebruikt alleen Node core modules).',
+    '// Haalt verzendlabels (als rauwe ZPL, rechtstreeks van Trunkrs) op voor',
+    '// dit station en stuurt ze via een kale TCP-verbinding naar de eigen',
+    '// (netwerk)labelprinter. Herdownload dit bestand als het printer-',
+    '// IP-adres wijzigt.',
+    "const http = require('http');",
+    "const https = require('https');",
+    "const net = require('net');",
+    '',
+    'const BASE_URL = ' + JSON.stringify(cfg.baseUrl) + ';',
+    'const TOKEN = ' + JSON.stringify(cfg.token) + ';',
+    'const PRINTER_IP = ' + JSON.stringify(cfg.printerIp) + ';',
+    'const PRINTER_PORT = ' + JSON.stringify(cfg.printerPort) + ';',
+    'const POLL_MS = 3000;',
+    '',
+    'function apiRequest(method, path, body) {',
+    '  return new Promise(function(resolve, reject) {',
+    '    const url = new URL(path, BASE_URL);',
+    '    const lib = url.protocol === "https:" ? https : http;',
+    '    const payload = body ? JSON.stringify(body) : null;',
+    '    const opts = {',
+    '      method: method,',
+    '      headers: Object.assign({ Authorization: "Bearer " + TOKEN }, payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {})',
+    '    };',
+    '    const r = lib.request(url, opts, function(res) {',
+    '      let data = "";',
+    '      res.on("data", function(chunk) { data += chunk; });',
+    '      res.on("end", function() {',
+    '        if (res.statusCode >= 200 && res.statusCode < 300) {',
+    '          try { resolve(data ? JSON.parse(data) : {}); } catch (e) { resolve({}); }',
+    '        } else {',
+    '          reject(new Error("HTTP " + res.statusCode + ": " + data));',
+    '        }',
+    '      });',
+    '    });',
+    '    r.on("error", reject);',
+    '    if (payload) r.write(payload);',
+    '    r.end();',
+    '  });',
+    '}',
+    '',
+    'function printZpl(zpl) {',
+    '  return new Promise(function(resolve, reject) {',
+    '    const socket = net.createConnection({ host: PRINTER_IP, port: PRINTER_PORT }, function() {',
+    '      socket.write(zpl, "utf8", function() { socket.end(); });',
+    '    });',
+    '    socket.setTimeout(8000, function() { socket.destroy(new Error("Printer reageerde niet binnen 8 seconden (IP/poort/netwerk controleren)")); });',
+    '    socket.on("close", function() { resolve(); });',
+    '    socket.on("error", reject);',
+    '  });',
+    '}',
+    '',
+    'async function tick() {',
+    '  try {',
+    '    const jobs = await apiRequest("GET", "/api/print-agent/jobs");',
+    '    for (const job of (jobs.jobs || [])) {',
+    '      try {',
+    '        await printZpl(job.zpl);',
+    '        await apiRequest("POST", "/api/print-agent/jobs/" + job.id + "/ack", { ok: true });',
+    '        console.log("[print-agent] label geprint voor order " + job.orderNumber);',
+    '      } catch (e) {',
+    '        console.error("[print-agent] printen mislukt voor order " + job.orderNumber + ":", e.message);',
+    '        await apiRequest("POST", "/api/print-agent/jobs/" + job.id + "/ack", { ok: false, error: e.message }).catch(function(){});',
+    '      }',
+    '    }',
+    '  } catch (e) {',
+    '    console.error("[print-agent] kon niet verbinden met LJ Verzending:", e.message);',
+    '  }',
+    '  setTimeout(tick, POLL_MS);',
+    '}',
+    '',
+    'console.log("[print-agent] gestart voor station \\"' + cfg.naam + '\\" -> printer " + PRINTER_IP + ":" + PRINTER_PORT + " (elke " + (POLL_MS/1000) + "s ophalen bij " + BASE_URL + ")");',
+    'tick();',
+    ''
+  ].join('\n');
+}
+
+// Stuurt het (al aangemaakte) Trunkrs-verzendlabel van 1 order als printjob
+// naar 1 specifiek inpakstation. Gebruikt de rauwe ZPL die Trunkrs standaard
+// meelevert naast de PDF (zie trunkrsLabelsStore) - geen extra Trunkrs-call
+// of PDF-conversie nodig.
+app.post('/api/print-stations/:id/print-label', (req, res) => {
+  const station = printStationsStore[req.params.id];
+  if (!station) return res.status(404).json({ error: 'Station niet gevonden.' });
+  const { orderNumber } = req.body || {};
+  const key = orderNumber != null ? String(orderNumber) : '';
+  const tl = key && trunkrsLabelsStore[key];
+  if (!tl) return res.status(404).json({ error: 'Geen Trunkrs-label bekend voor deze order.' });
+  const zpl = tl.label && tl.label.zpl;
+  if (!zpl) return res.status(422).json({ error: 'Dit label heeft geen ZPL-data (onverwacht - normaal levert Trunkrs dit altijd mee naast de PDF).' });
+  const jobId = crypto.randomUUID();
+  printJobsStore[jobId] = {
+    id: jobId,
+    stationId: station.id,
+    orderNumber: key,
+    zpl: zpl,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    deliveredAt: null,
+    doneAt: null,
+    error: null
+  };
+  savePrintJobs(printJobsStore);
+  res.json({ ok: true, jobId: jobId });
+});
+
+// --- Print-agent-endpoints (eigen token, geen kantoor-Basic-Auth) --------
+// Zie requirePrintAgentToken hierboven en de bypass in de Basic-Auth-
+// middleware bovenaan dit bestand.
+app.get('/api/print-agent/jobs', requirePrintAgentToken, (req, res) => {
+  const station = req.printStation;
+  station.lastSeenAt = new Date().toISOString();
+  savePrintStations(printStationsStore);
+  const jobs = Object.keys(printJobsStore)
+    .map(function(id) { return printJobsStore[id]; })
+    .filter(function(j) { return j.stationId === station.id && j.status === 'pending'; });
+  jobs.forEach(function(j) { j.status = 'delivered'; j.deliveredAt = new Date().toISOString(); });
+  if (jobs.length) savePrintJobs(printJobsStore);
+  res.json({ jobs: jobs.map(function(j) { return { id: j.id, orderNumber: j.orderNumber, zpl: j.zpl, createdAt: j.createdAt }; }) });
+});
+
+app.post('/api/print-agent/jobs/:jobId/ack', requirePrintAgentToken, (req, res) => {
+  const job = printJobsStore[req.params.jobId];
+  if (!job || job.stationId !== req.printStation.id) return res.status(404).json({ error: 'Printjob niet gevonden.' });
+  const { ok, error } = req.body || {};
+  job.status = ok ? 'done' : 'failed';
+  job.doneAt = new Date().toISOString();
+  job.error = ok ? null : (error || 'Onbekende fout');
+  savePrintJobs(printJobsStore);
+  res.json({ ok: true });
 });
 
 // PIN-check voor het Pack & Go-scherm (zie packgoMedewerkersStore hierboven).
