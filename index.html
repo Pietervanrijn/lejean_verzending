@@ -12,10 +12,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .logo{font-size:28px;font-weight:700;letter-spacing:1px}
 .logo span{color:#f0821e}
 .header-right{display:flex;align-items:center;gap:16px}
-.updated{font-size:12px;color:rgba(255,255,255,.6)}
-.refresh-btn{background:#f0821e;color:#fff;border:none;padding:10px 24px;border-radius:25px;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:8px}
-.refresh-btn:hover{background:#f5a04a;transform:scale(1.05)}
-.refresh-btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.updated{font-size:12px;color:rgba(255,255,255,.6);cursor:pointer;transition:color .15s}
+.updated:hover{color:rgba(255,255,255,.9)}
+.updated.is-refreshing{animation:updatedPulse 1s ease-in-out infinite}
+@keyframes updatedPulse{50%{opacity:.35}}
 .tabs-bar{background:#ece9e2;border-radius:12px;padding:4px;margin-bottom:20px;display:flex;gap:2px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .tab-btn{border:none;background:transparent;padding:12px 22px;border-radius:9px;font-size:14px;font-weight:600;color:#8a8a80;cursor:pointer;transition:all .15s;flex:1}
 .tab-btn:hover{color:#33401f}
@@ -233,10 +233,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="header">
 <div class="logo">LJ <span>Verzending</span></div>
 <div class="header-right">
-<span class="updated" id="updated"></span>
-<button class="refresh-btn" id="refreshBtn" onclick="loadOrders()">
-<span>&#8635;</span> Vernieuwen
-</button>
+<span class="updated" id="updated" onclick="loadOrders()" title="Klik om nu te vernieuwen"></span>
 <button type="button" class="settings-gear-btn" id="settingsGearBtn" onclick="openSettingsDrawer()" title="Instellingen" aria-label="Instellingen">&#9881;</button>
 </div>
 </div>
@@ -485,11 +482,21 @@ if (badgesEl) badgesEl.style.display = TAB_BADGE_DISPLAY[tab] || 'none';
 applyFilter();
 }
 
+// De app ververst zichzelf automatisch (zie de setInterval hieronder, op
+// verzoek van Pieter 2026-08-30) i.p.v. een handmatige "Vernieuwen"-knop.
+// Omdat renderOrders/renderLabelOrders/renderVerzondenOrders de tabel steeds
+// helemaal opnieuw opbouwen, zou een automatische ververs-cyclus anders
+// stilletjes alle aangevinkte checkboxes wissen terwijl een medewerker net
+// bezig is orders te selecteren voor pakbonnen - daarom onthoudt deze functie
+// welke orders aangevinkt stonden en zet dat na het herladen weer terug.
+var isLoadingOrders = false;
 async function loadOrders() {
-var btn = document.getElementById('refreshBtn');
-btn.disabled = true;
-btn.innerHTML = '<span class="spinner"></span> Laden...';
+if (isLoadingOrders) return;
+isLoadingOrders = true;
+var updatedEl = document.getElementById('updated');
+if (updatedEl) updatedEl.classList.add('is-refreshing');
 document.getElementById('errorBox').innerHTML = '';
+var checkedNums = Array.prototype.map.call(document.querySelectorAll('.order-checkbox:checked'), function(cb) { return cb.getAttribute('data-num'); }).filter(Boolean);
 try {
 var res = await fetch('/api/orders');
 if (!res.ok) throw new Error('Server error: ' + res.status);
@@ -500,14 +507,20 @@ allMethods = computeSortedMethods(allOrders);
 populateFilter(allMethods);
 populateExtraFilterOptions();
 applyFilter();
-document.getElementById('updated').textContent = 'Bijgewerkt: ' + new Date().toLocaleTimeString('nl-NL');
+if (checkedNums.length) {
+document.querySelectorAll('.order-checkbox').forEach(function(cb) {
+if (checkedNums.indexOf(cb.getAttribute('data-num')) !== -1) cb.checked = true;
+});
+updateSelection();
+}
+if (updatedEl) updatedEl.textContent = 'Bijgewerkt: ' + new Date().toLocaleTimeString('nl-NL');
 } catch(err) {
 document.getElementById('errorBox').innerHTML = '<div class="error-box">Fout: ' + err.message + '</div>';
 document.getElementById('ordersContainer').innerHTML = '<div class="empty"><div class="empty-icon">&#10060;</div><p>Kon orders niet ophalen</p></div>';
 document.getElementById('count').textContent = '!';
 } finally {
-btn.disabled = false;
-btn.innerHTML = '<span>&#8635;</span> Vernieuwen';
+isLoadingOrders = false;
+if (updatedEl) updatedEl.classList.remove('is-refreshing');
 }
 }
 
@@ -2220,6 +2233,16 @@ restorePersistedToolbarSettings();
 loadPrintStations();
 
 loadOrders();
+
+// Automatisch verversen i.p.v. de handmatige "Vernieuwen"-knop (op verzoek
+// van Pieter, 2026-08-30). Slaat een cyclus over zolang er een modal open
+// staat (labeldetails, instellingen, PIN-inlog), zodat dat scherm niet
+// onderuit gehaald wordt terwijl iemand ermee bezig is.
+var AUTO_REFRESH_MS = 30000;
+setInterval(function() {
+if (document.querySelector('.modal-overlay.open')) return;
+loadOrders();
+}, AUTO_REFRESH_MS);
 </script>
 </body>
 </html>
