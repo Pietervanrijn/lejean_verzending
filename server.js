@@ -770,6 +770,42 @@ app.get('/api/settings/print-stations/:id/agent-script', (req, res) => {
   res.send(script);
 });
 
+// Kleine .bat-starter erbij (op verzoek van Pieter, 2026-08-31): zonder dit
+// moest je elke keer zelf Command Prompt openen en "node ...js" intypen, wat
+// in de praktijk best omslachtig bleek. Dit bestand mag je gewoon dubbel-
+// klikken. Het zoekt zelf naar het print-agent-scriptje in dezelfde map (met
+// een wildcard, want Windows plakt bij herhaald downloaden vanzelf "(1)",
+// "(2)" etc. achter de bestandsnaam) i.p.v. een vaste naam te verwachten.
+app.get('/api/settings/print-stations/:id/agent-launcher.bat', (req, res) => {
+  const s = printStationsStore[req.params.id];
+  if (!s) return res.status(404).send('Station niet gevonden.');
+  const safeNaam = s.naam.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'station';
+  const bat = buildPrintAgentLauncherBat({ naam: s.naam, safeNaam: safeNaam });
+  res.set('Content-Type', 'application/bat; charset=utf-8');
+  res.set('Content-Disposition', 'attachment; filename="start-print-agent-' + safeNaam + '.bat"');
+  res.send(bat);
+});
+
+function buildPrintAgentLauncherBat(cfg) {
+  // \r\n: Windows .bat-bestanden verwachten CRLF-regeleindes.
+  return [
+    '@echo off',
+    'cd /d "%~dp0"',
+    'echo Print-agent voor station "' + cfg.naam + '" wordt gestart...',
+    'echo Laat dit venster openstaan zolang je labels wilt kunnen printen.',
+    'echo.',
+    'set GEVONDEN=0',
+    'for %%f in ("print-agent-' + cfg.safeNaam + '*.js") do (',
+    '  set GEVONDEN=1',
+    '  node "%%f"',
+    '  goto :klaar',
+    ')',
+    'if %GEVONDEN%==0 echo Kon het print-agent-scriptje (print-agent-' + cfg.safeNaam + '*.js) niet vinden in deze map.',
+    ':klaar',
+    'pause'
+  ].join('\r\n') + '\r\n';
+}
+
 function buildPrintAgentScript(cfg) {
   return [
     '// LJ Verzending — print-agent voor station "' + cfg.naam + '"',
