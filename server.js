@@ -202,6 +202,17 @@ function saveOrderIdMap(data) {
 try { fs.writeFileSync(ORDER_ID_MAP_FILE, JSON.stringify(data)); } catch(e) { console.error('saveOrderIdMap error:', e.message); }
 }
 let orderIdMapStore = loadOrderIdMap();
+// trunkrsLabelsStore/orderIdMapStore werden hier eerder bewust NIET
+// gemigreerd (aanname: "server-derived, dus altijd kaal gesleuteld"). Die
+// aanname bleek onjuist: het testorder ORD80456 (Lightspeed-ordernummer dat
+// zelf al de tekst "ORD" bevat) liet zien dat /api/trunkrs/label (zie
+// orderKey hieronder) en de order-id-cache hierboven wél degelijk een
+// ongestripte "ORD..."-sleutel konden wegschrijven, die vervolgens nergens
+// meer gelezen werd zodra de order via "genegeerd" weer als kaal
+// ordernummer werd bijgewerkt - gevonden en gefixt op verzoek van Pieter,
+// 2026-08-31 (zie ook enrichOrders() en orderKey verderop in dit bestand).
+if (migrateOrdPrefixedKeys(trunkrsLabelsStore, 'trunkrs-labels')) saveTrunkrsLabels(trunkrsLabelsStore);
+if (migrateOrdPrefixedKeys(orderIdMapStore, 'order-id-map')) saveOrderIdMap(orderIdMapStore);
 
 // Medewerkers (naam -> PIN) voor de Pack & Go PIN-check, beheerd via het
 // instellingenpaneel (rechter zijbalk) i.p.v. een Railway env var die elke
@@ -339,7 +350,7 @@ page++;
 // gericht kunnen opzoeken.
 let idMapChanged = false;
 for (const o of all) {
-const key = String(o.number);
+const key = bareOrderNumberKey(o.number);
 if (orderIdMapStore[key] !== o.id) { orderIdMapStore[key] = o.id; idMapChanged = true; }
 }
 if (idMapChanged) saveOrderIdMap(orderIdMapStore);
@@ -357,7 +368,11 @@ return all.concat(extra);
 }
 
 async function fetchLocallyTrackedMissingOrders(alreadyFetched) {
-const present = new Set(alreadyFetched.map(o => String(o.number)));
+// bareOrderNumberKey hier ook: orderStatusStore/trunkrsLabelsStore zijn kaal
+// gesleuteld, dus zonder normalisatie zou een order met een al "ORD"-bevattend
+// Lightspeed-ordernummer hier ten onrechte als "nog niet aanwezig" gezien
+// worden en dubbel in de resultaten belanden.
+const present = new Set(alreadyFetched.map(o => bareOrderNumberKey(o.number)));
 const trackedNumbers = new Set([
 ...Object.keys(orderStatusStore).filter(n => orderStatusStore[n] && orderStatusStore[n] !== 'inkomend'),
 ...Object.keys(trunkrsLabelsStore)
@@ -421,10 +436,17 @@ const pickupMatch = orderStr.match(/"([^"]*[Aa][Ff][Hh][Aa][Ll][Ee][Nn]\s+[Bb][I
 if (pickupMatch) shippingMethod = pickupMatch[1];
 const isPickup = !!(order.shipmentIsPickup || /AFHALEN BIJ LEJEAN/i.test(shippingMethod));
 const ordNummer = String(order.number || '').toUpperCase().startsWith('ORD') ? String(order.number) : 'ORD' + order.number;
-const printStatus = printStatusStore[String(order.number)] || 'geen';
-const orderStatus = orderStatusStore[String(order.number)] || 'inkomend';
+// Let op: NIET String(order.number) hier - Lightspeed geeft voor sommige
+// (test)orders een ordernummer terug dat zelf al "ORD" bevat (bv.
+// "ORD80456"), terwijl deze stores overal elders juist kaal gesleuteld
+// worden (zie bareOrderNumberKey hierboven). Zonder deze normalisatie mist
+// de lookup dan stil de eerder opgeslagen status/printstatus/label - precies
+// het bugbeeld dat Pieter meldde (order bleef als "inkomend" tonen na
+// "genegeerd", 2026-08-31).
+const printStatus = printStatusStore[bareOrderNumberKey(order.number)] || 'geen';
+const orderStatus = orderStatusStore[bareOrderNumberKey(order.number)] || 'inkomend';
 const summary = await fetchOrderProductsSummary(order.id);
-const trunkrsLabel = trunkrsLabelsStore[String(order.number)] || null;
+const trunkrsLabel = trunkrsLabelsStore[bareOrderNumberKey(order.number)] || null;
 return { ...order, _klant: klant, _ordNummer: ordNummer, _shippingMethod: shippingMethod, _isPickup: isPickup, _printStatus: printStatus, _orderStatus: orderStatus, itemCount: summary.itemCount, quantityOrdered: summary.quantityOrdered, _trunkrsLabel: trunkrsLabel };
 });
 return enriched;
@@ -651,7 +673,11 @@ const payload = buildTrunkrsShipmentPayload(order, products, service);
 const trunkrsRes = await axios.post(TRUNKRS_BASE_URL + '/shipments', payload, { headers: trunkrsHeaders() });
 const shipment = trunkrsRes.data.data && trunkrsRes.data.data[0] ? trunkrsRes.data.data[0] : trunkrsRes.data.data;
 
-const orderKey = String(order.number);
+// Kaal sleutelen (zie bareOrderNumberKey) i.p.v. String(order.number): anders
+// belandt een order waarvan Lightspeed zelf al een "ORD..."-ordernummer
+// teruggeeft ongestript in trunkrsLabelsStore/orderStatusStore, terwijl alle
+// andere plekken in deze app die stores juist kaal gesleuteld lezen.
+const orderKey = bareOrderNumberKey(order.number);
 const nowIso = new Date().toISOString();
 trunkrsLabelsStore[orderKey] = {
 orderId: order.id,
