@@ -814,6 +814,17 @@ app.get('/api/settings/print-stations/:id/agent-launcher.bat', (req, res) => {
 
 function buildPrintAgentLauncherBat(cfg) {
   // \r\n: Windows .bat-bestanden verwachten CRLF-regeleindes.
+  //
+  // Let op: "for %%f in (...)" (de vorige aanpak) doorloopt bestanden in de
+  // volgorde die Windows toevallig teruggeeft - meestal alfabetisch, dus bij
+  // een herhaalde download (Windows hangt dan zelf " (1)", " (2)", etc. aan
+  // de bestandsnaam) kon dit een VEROUDERDE kopie van het scriptje pakken
+  // i.p.v. de nieuwste, bijvoorbeeld nog een kopie van vóór een serverfix.
+  // "dir /b /o-d" sorteert i.p.v. daarvan op laatst-gewijzigd-datum (nieuwste
+  // eerst), zodat altijd het meest recent gedownloade scriptje gebruikt
+  // wordt, ook als er per ongeluk oudere kopieën in dezelfde map staan
+  // (gevonden op verzoek van Pieter, 2026-08-31, na een HTTP-301-fout die
+  // bleek te komen van een oud scriptje dat de .bat nog steeds oppikte).
   return [
     '@echo off',
     'cd /d "%~dp0"',
@@ -821,7 +832,7 @@ function buildPrintAgentLauncherBat(cfg) {
     'echo Laat dit venster openstaan zolang je labels wilt kunnen printen.',
     'echo.',
     'set GEVONDEN=0',
-    'for %%f in ("print-agent-' + cfg.safeNaam + '*.js") do (',
+    'for /f "delims=" %%f in (\'dir /b /o-d "print-agent-' + cfg.safeNaam + '*.js" 2^>nul\') do (',
     '  set GEVONDEN=1',
     '  node "%%f"',
     '  goto :klaar',
