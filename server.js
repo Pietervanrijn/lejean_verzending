@@ -248,6 +248,41 @@ function savePrintStations(data) {
 }
 let printStationsStore = loadPrintStations();
 
+// Elk inpakstation had tot 2026-08-31 maar 1 printer (voor labels, kaal
+// printerIp/printerPort op het station zelf). Op verzoek van Pieter komt daar
+// een volledig gelijkwaardige tweede printer bij (voor pakbonnen), elk met
+// een eigen formaat en een "eerst bekijken voordat er geprint wordt"-
+// schakelaar (zie Sendcloud's Afdrukopties-scherm). Deze migratie verplaatst
+// bestaande stations naar de nieuwe geneste vorm zonder de al werkende
+// labelprinter-configuratie te verliezen.
+function migratePrintStationsShape(store) {
+  let changed = false;
+  Object.keys(store).forEach(function(id) {
+    const s = store[id];
+    if (!s.label) {
+      s.label = {
+        printerIp: s.printerIp || '',
+        printerPort: s.printerPort || 9100,
+        formaat: 'A6',
+        previewFirst: true
+      };
+      delete s.printerIp;
+      delete s.printerPort;
+      changed = true;
+    }
+    if (!s.pakbon) {
+      s.pakbon = { printerIp: '', printerPort: 9100, formaat: 'A4', previewFirst: true };
+      changed = true;
+    }
+    if (!s.detectedPrinters) {
+      s.detectedPrinters = [];
+      changed = true;
+    }
+  });
+  return changed;
+}
+if (migratePrintStationsShape(printStationsStore)) savePrintStations(printStationsStore);
+
 const PRINT_JOBS_FILE = DATA_DIR + '/print-jobs.json';
 function loadPrintJobs() {
   try { return JSON.parse(fs.readFileSync(PRINT_JOBS_FILE, 'utf8')); } catch(e) { return {}; }
@@ -784,6 +819,46 @@ const r = await axios.get(url, { headers: trunkrsHeaders(), responseType: 'array
 return Buffer.from(r.data);
 }
 
+// --- Pakbon-PDF-rendering (voor direct/silent printen naar de pakbonprinter) --
+// Rendert de door de browser-client opgebouwde pakbon-HTML (dezelfde HTML
+// die tot 2026-08-31 alleen via window.print() gebruikt werd) server-side
+// naar echte PDF-bytes met puppeteer - dat is een echte (headless) Chromium,
+// dus de al bestaande layout/CSS/barcode (JsBarcode) werkt hier ongewijzigd,
+// zonder dat de pakbon-opmaak ergens opnieuw nagebouwd hoeft te worden.
+// 1 gedeelde browserinstantie wordt hergebruikt over meerdere aanroepen heen
+// (opstarten van Chromium kost ruim 1 seconde, dat wil je niet per pakbon
+// opnieuw doen); alleen de pagina zelf wordt per aanroep geopend/gesloten.
+let puppeteerBrowserPromise = null;
+function getPuppeteerBrowser() {
+  if (!puppeteerBrowserPromise) {
+    const puppeteer = require('puppeteer');
+    puppeteerBrowserPromise = puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }).catch(function(e) { puppeteerBrowserPromise = null; throw e; });
+  }
+  return puppeteerBrowserPromise;
+}
+async function renderHtmlToPdf(html) {
+  const browser = await getPuppeteerBrowser();
+  const page = await browser.newPage();
+  try {
+    // networkidle0: de pakbon-HTML laadt JsBarcode via een <script src>
+    // (CDN) om de barcode te tekenen - wachten tot dat script binnen is en
+    // heeft kunnen draaien, anders is de barcode leeg op de PDF.
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 20000 });
+    // Puppeteer v22+ geeft hier een Uint8Array terug i.p.v. een echte Node
+    // Buffer - .toString('base64') daarop negeert de encoding stilzwijgend en
+    // levert een kommagescheiden lijst getallen op i.p.v. base64 (gevonden
+    // tijdens het lokaal testen van de pakbon-PDF-route, 2026-08-31). Expliciet
+    // naar Buffer wrappen voorkomt dat.
+    const bytes = await page.pdf({ printBackground: true, preferCSSPageSize: true });
+    return Buffer.from(bytes);
+  } finally {
+    await page.close().catch(function(){});
+  }
+}
+
 app.get('/api/trunkrs/label-file/:orderNumber', async (req, res) => {
 const key = bareOrderNumberKey(req.params.orderNumber);
 const tl = key && trunkrsLabelsStore[key];
@@ -825,31 +900,70 @@ app.get('/api/settings/print-stations', (req, res) => {
     // Token bewust niet meegeven in de lijst - alleen relevant voor de
     // print-agent zelf, die zit in het gegenereerde scriptje (zie
     // agent-script-route hieronder).
-    return { id: s.id, naam: s.naam, printerIp: s.printerIp, printerPort: s.printerPort, createdAt: s.createdAt, lastSeenAt: s.lastSeenAt || null };
+    return {
+      id: s.id,
+      naam: s.naam,
+      label: s.label,
+      pakbon: s.pakbon,
+      detectedPrinters: s.detectedPrinters || [],
+      createdAt: s.createdAt,
+      lastSeenAt: s.lastSeenAt || null
+    };
   });
   res.json({ stations: stations });
 });
+
+function parsePrinterConfig(input, fallbackFormaat) {
+  const c = input || {};
+  const ip = c.printerIp != null ? String(c.printerIp).trim() : '';
+  const poort = c.printerPort ? parseInt(c.printerPort, 10) : 9100;
+  return {
+    printerIp: ip,
+    printerPort: Number.isInteger(poort) && poort >= 1 && poort <= 65535 ? poort : 9100,
+    formaat: c.formaat ? String(c.formaat) : fallbackFormaat,
+    previewFirst: c.previewFirst !== false
+  };
+}
 
 app.post('/api/settings/print-stations', (req, res) => {
   const { naam, printerIp, printerPort } = req.body || {};
   const naamTrimmed = naam != null ? String(naam).trim() : '';
   const ipTrimmed = printerIp != null ? String(printerIp).trim() : '';
   const poort = printerPort ? parseInt(printerPort, 10) : 9100;
-  if (!naamTrimmed || !ipTrimmed) return res.status(400).json({ error: 'Naam en printer-IP zijn verplicht.' });
+  if (!naamTrimmed || !ipTrimmed) return res.status(400).json({ error: 'Naam en printer-IP (voor labels) zijn verplicht.' });
   if (!Number.isInteger(poort) || poort < 1 || poort > 65535) return res.status(400).json({ error: 'Poort moet een getal tussen 1 en 65535 zijn.' });
   const id = crypto.randomUUID();
   const token = crypto.randomBytes(24).toString('hex');
   printStationsStore[id] = {
     id: id,
     naam: naamTrimmed,
-    printerIp: ipTrimmed,
-    printerPort: poort,
     token: token,
     createdAt: new Date().toISOString(),
-    lastSeenAt: null
+    lastSeenAt: null,
+    label: { printerIp: ipTrimmed, printerPort: poort, formaat: 'A6', previewFirst: true },
+    // Pakbonprinter is bewust leeg bij aanmaken - Pieter vult 'm apart in via
+    // de Afdrukopties-instellingen (of kiest 'm uit de door de print-agent
+    // gedetecteerde netwerkprinters), zodra de print-agent op deze pc draait.
+    pakbon: { printerIp: '', printerPort: 9100, formaat: 'A4', previewFirst: true },
+    detectedPrinters: []
   };
   savePrintStations(printStationsStore);
-  res.json({ ok: true, id: id, naam: naamTrimmed, printerIp: ipTrimmed, printerPort: poort });
+  res.json({ ok: true, id: id, naam: naamTrimmed, label: printStationsStore[id].label, pakbon: printStationsStore[id].pakbon });
+});
+
+// Werkt de label- en/of pakbon-printerconfiguratie van 1 station bij (naam,
+// IP/poort, formaat, preview-schakelaar). Overschrijft alleen de meegegeven
+// delen - stuur bv. alleen { pakbon: {...} } mee om enkel de pakbonprinter
+// aan te passen zonder de labelconfiguratie aan te raken.
+app.patch('/api/settings/print-stations/:id', (req, res) => {
+  const s = printStationsStore[req.params.id];
+  if (!s) return res.status(404).json({ error: 'Station niet gevonden.' });
+  const { naam, label, pakbon } = req.body || {};
+  if (naam != null && String(naam).trim()) s.naam = String(naam).trim();
+  if (label) s.label = parsePrinterConfig(label, 'A6');
+  if (pakbon) s.pakbon = parsePrinterConfig(pakbon, 'A4');
+  savePrintStations(printStationsStore);
+  res.json({ ok: true, id: s.id, naam: s.naam, label: s.label, pakbon: s.pakbon });
 });
 
 app.delete('/api/settings/print-stations/:id', (req, res) => {
@@ -875,7 +989,15 @@ app.get('/api/settings/print-stations/:id/agent-script', (req, res) => {
   const s = printStationsStore[req.params.id];
   if (!s) return res.status(404).send('Station niet gevonden.');
   const baseUrl = req.protocol + '://' + req.get('host');
-  const script = buildPrintAgentScript({ baseUrl: baseUrl, token: s.token, naam: s.naam, printerIp: s.printerIp, printerPort: s.printerPort });
+  const script = buildPrintAgentScript({
+    baseUrl: baseUrl,
+    token: s.token,
+    naam: s.naam,
+    labelIp: s.label.printerIp,
+    labelPort: s.label.printerPort,
+    pakbonIp: s.pakbon.printerIp,
+    pakbonPort: s.pakbon.printerPort
+  });
   const safeNaam = s.naam.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'station';
   res.set('Content-Type', 'application/javascript; charset=utf-8');
   res.set('Content-Disposition', 'attachment; filename="print-agent-' + safeNaam + '.js"');
@@ -934,19 +1056,26 @@ function buildPrintAgentScript(cfg) {
     '// LJ Verzending — print-agent voor station "' + cfg.naam + '"',
     '// Automatisch gegenereerd - draai dit met: node print-agent.js',
     '// Geen npm install nodig (gebruikt alleen Node core modules).',
-    '// Haalt verzendlabels (als rauwe ZPL, rechtstreeks van Trunkrs) op voor',
-    '// dit station en stuurt ze via een kale TCP-verbinding naar de eigen',
-    '// (netwerk)labelprinter. Herdownload dit bestand als het printer-',
-    '// IP-adres wijzigt.',
+    '// Haalt printjobs op voor dit station en stuurt ze via een kale TCP-',
+    '// verbinding door naar de juiste (netwerk)printer: ZPL-labels naar de',
+    '// labelprinter, PDF-pakbonnen (als bytes, base64 aangeleverd) naar de',
+    '// pakbonprinter. Rapporteert daarnaast elke minuut de Windows-netwerk-',
+    '// printers van deze pc terug (voor het printerkeuzemenu in de',
+    '// instellingen) via PowerShell (Get-Printer/Get-PrinterPort). Herdownload',
+    '// dit bestand als een printer-IP-adres wijzigt.',
     "const http = require('http');",
     "const https = require('https');",
     "const net = require('net');",
+    "const { exec } = require('child_process');",
     '',
     'const BASE_URL = ' + JSON.stringify(cfg.baseUrl) + ';',
     'const TOKEN = ' + JSON.stringify(cfg.token) + ';',
-    'const PRINTER_IP = ' + JSON.stringify(cfg.printerIp) + ';',
-    'const PRINTER_PORT = ' + JSON.stringify(cfg.printerPort) + ';',
+    'const LABEL_IP = ' + JSON.stringify(cfg.labelIp) + ';',
+    'const LABEL_PORT = ' + JSON.stringify(cfg.labelPort) + ';',
+    'const PAKBON_IP = ' + JSON.stringify(cfg.pakbonIp) + ';',
+    'const PAKBON_PORT = ' + JSON.stringify(cfg.pakbonPort) + ';',
     'const POLL_MS = 3000;',
+    'const DISCOVER_MS = 60000;',
     '',
     'function apiRequest(method, path, body) {',
     '  return new Promise(function(resolve, reject) {',
@@ -974,10 +1103,15 @@ function buildPrintAgentScript(cfg) {
     '  });',
     '}',
     '',
-    'function printZpl(zpl) {',
+    '// data: string (ZPL, utf8-tekst) of Buffer (PDF-bytes) - beide gaan als',
+    '// kale bytes over dezelfde raw-socket-verbinding naar de printer, dat is',
+    '// alles wat een netwerkprinter met een TCP/IP-poort (Zebra of anders)',
+    '// nodig heeft.',
+    'function sendToPrinter(ip, port, data) {',
     '  return new Promise(function(resolve, reject) {',
-    '    const socket = net.createConnection({ host: PRINTER_IP, port: PRINTER_PORT }, function() {',
-    '      socket.write(zpl, "utf8", function() { socket.end(); });',
+    '    if (!ip) { reject(new Error("Geen printer-IP ingesteld voor dit documenttype.")); return; }',
+    '    const socket = net.createConnection({ host: ip, port: port }, function() {',
+    '      socket.write(data, function() { socket.end(); });',
     '    });',
     '    socket.setTimeout(8000, function() { socket.destroy(new Error("Printer reageerde niet binnen 8 seconden (IP/poort/netwerk controleren)")); });',
     '    socket.on("close", function() { resolve(); });',
@@ -990,9 +1124,13 @@ function buildPrintAgentScript(cfg) {
     '    const jobs = await apiRequest("GET", "/api/print-agent/jobs");',
     '    for (const job of (jobs.jobs || [])) {',
     '      try {',
-    '        await printZpl(job.zpl);',
+    '        if (job.type === "pdf") {',
+    '          await sendToPrinter(PAKBON_IP, PAKBON_PORT, Buffer.from(job.content, "base64"));',
+    '        } else {',
+    '          await sendToPrinter(LABEL_IP, LABEL_PORT, job.content);',
+    '        }',
     '        await apiRequest("POST", "/api/print-agent/jobs/" + job.id + "/ack", { ok: true });',
-    '        console.log("[print-agent] label geprint voor order " + job.orderNumber);',
+    '        console.log("[print-agent] " + job.type + " geprint voor order " + job.orderNumber);',
     '      } catch (e) {',
     '        console.error("[print-agent] printen mislukt voor order " + job.orderNumber + ":", e.message);',
     '        await apiRequest("POST", "/api/print-agent/jobs/" + job.id + "/ack", { ok: false, error: e.message }).catch(function(){});',
@@ -1004,8 +1142,39 @@ function buildPrintAgentScript(cfg) {
     '  setTimeout(tick, POLL_MS);',
     '}',
     '',
-    'console.log("[print-agent] gestart voor station \\"' + cfg.naam + '\\" -> printer " + PRINTER_IP + ":" + PRINTER_PORT + " (elke " + (POLL_MS/1000) + "s ophalen bij " + BASE_URL + ")");',
+    '// Vraagt Windows via PowerShell om alle geïnstalleerde printers met hun',
+    '// poort, en zoekt daarbij (waar mogelijk) het IP-adres op via de',
+    '// TCP/IP-printerpoort (PrinterHostAddress) - dat is het adres dat je',
+    '// hier ook zou intypen. Printers zonder netwerk-IP (bv. USB) komen niet',
+    '// mee in de lijst, want daar heeft deze print-agent toch niets aan.',
+    'const PS_CMD = "Get-Printer | ForEach-Object { $p = $_; $port = Get-PrinterPort -Name $p.PortName -ErrorAction SilentlyContinue; if ($port -and $port.PrinterHostAddress) { [PSCustomObject]@{ name = $p.Name; ip = $port.PrinterHostAddress } } } | ConvertTo-Json -Compress";',
+    '',
+    '// -EncodedCommand (base64 UTF-16LE) i.p.v. de PowerShell-opdracht als',
+    '// tekst mee te geven - dat laatste struikelt al snel over de dubbele',
+    '// aanhalingstekens die ConvertTo-Json nodig heeft zodra dit ook nog eens',
+    '// door de Windows-shell heen moet. Dit is de standaard, escape-vrije',
+    '// manier om een PowerShell-opdracht vanuit Node.js aan te roepen.',
+    'function discoverPrinters() {',
+    '  if (process.platform !== "win32") return; // alleen zinvol op de Windows-pc\'s van de inpakstations',
+    '  const encoded = Buffer.from(PS_CMD, "utf16le").toString("base64");',
+    '  exec("powershell -NoProfile -NonInteractive -EncodedCommand " + encoded, { timeout: 15000 }, function(err, stdout) {',
+    '    if (err) { console.error("[print-agent] printer-detectie mislukt:", err.message); return; }',
+    '    let parsed;',
+    '    try { parsed = JSON.parse((stdout || "").trim() || "[]"); } catch (e) { console.error("[print-agent] kon printerlijst niet lezen:", e.message); return; }',
+    '    const list = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);',
+    '    const printers = list.filter(function(p) { return p && p.ip; }).map(function(p) { return { name: String(p.name || ""), ip: String(p.ip) }; });',
+    '    apiRequest("POST", "/api/print-agent/printers", { printers: printers }).catch(function(e) {',
+    '      console.error("[print-agent] kon gedetecteerde printers niet doorgeven:", e.message);',
+    '    });',
+    '  });',
+    '}',
+    '',
+    'console.log("[print-agent] gestart voor station \\"' + cfg.naam + '\\""); ',
+    'console.log("[print-agent] label -> " + (LABEL_IP || "(niet ingesteld)") + ":" + LABEL_PORT + ", pakbon -> " + (PAKBON_IP || "(niet ingesteld)") + ":" + PAKBON_PORT);',
+    'console.log("[print-agent] elke " + (POLL_MS/1000) + "s printjobs ophalen bij " + BASE_URL);',
     'tick();',
+    'discoverPrinters();',
+    'setInterval(discoverPrinters, DISCOVER_MS);',
     ''
   ].join('\n');
 }
@@ -1045,7 +1214,8 @@ app.post('/api/print-stations/:id/print-label', async (req, res) => {
     id: jobId,
     stationId: station.id,
     orderNumber: key,
-    zpl: zpl,
+    type: 'zpl',
+    content: zpl,
     status: 'pending',
     createdAt: new Date().toISOString(),
     deliveredAt: null,
@@ -1054,6 +1224,41 @@ app.post('/api/print-stations/:id/print-label', async (req, res) => {
   };
   savePrintJobs(printJobsStore);
   res.json({ ok: true, jobId: jobId });
+});
+
+// Rendert de door de klant/client al opgebouwde pakbon-HTML (dezelfde HTML
+// die tot 2026-08-31 rechtstreeks naar een nieuw browsertabblad ging voor
+// window.print()) server-side naar echte PDF-bytes en stuurt die als
+// printjob (type 'pdf') naar de pakbonprinter van 1 specifiek inpakstation.
+// Hergebruikt bewust de bestaande, al werkende pakbon-layout/-opmaak in
+// plaats van die server-side opnieuw op te bouwen - puppeteer rendert exact
+// dezelfde HTML/CSS/JS (incl. de JsBarcode-barcode) als de browser zou doen.
+app.post('/api/print-stations/:id/print-pakbon', async (req, res) => {
+  const station = printStationsStore[req.params.id];
+  if (!station) return res.status(404).json({ error: 'Station niet gevonden.' });
+  const { html, orderNumbers } = req.body || {};
+  if (!html || typeof html !== 'string') return res.status(400).json({ error: 'Geen pakbon-HTML meegegeven.' });
+  try {
+    const pdfBuffer = await renderHtmlToPdf(html);
+    const jobId = crypto.randomUUID();
+    printJobsStore[jobId] = {
+      id: jobId,
+      stationId: station.id,
+      orderNumber: Array.isArray(orderNumbers) ? orderNumbers.map(bareOrderNumberKey).join(',') : '',
+      type: 'pdf',
+      content: pdfBuffer.toString('base64'),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      deliveredAt: null,
+      doneAt: null,
+      error: null
+    };
+    savePrintJobs(printJobsStore);
+    res.json({ ok: true, jobId: jobId });
+  } catch (e) {
+    console.error('print-pakbon: PDF-rendering mislukt:', e.message);
+    res.status(502).json({ error: 'Pakbon omzetten naar PDF mislukt: ' + e.message });
+  }
 });
 
 // --- Print-agent-endpoints (eigen token, geen kantoor-Basic-Auth) --------
@@ -1068,7 +1273,22 @@ app.get('/api/print-agent/jobs', requirePrintAgentToken, (req, res) => {
     .filter(function(j) { return j.stationId === station.id && j.status === 'pending'; });
   jobs.forEach(function(j) { j.status = 'delivered'; j.deliveredAt = new Date().toISOString(); });
   if (jobs.length) savePrintJobs(printJobsStore);
-  res.json({ jobs: jobs.map(function(j) { return { id: j.id, orderNumber: j.orderNumber, zpl: j.zpl, createdAt: j.createdAt }; }) });
+  res.json({ jobs: jobs.map(function(j) { return { id: j.id, orderNumber: j.orderNumber, type: j.type || 'zpl', content: j.content != null ? j.content : j.zpl, createdAt: j.createdAt }; }) });
+});
+
+// Ontvangt de door de print-agent gedetecteerde Windows-netwerkprinters
+// (zie discoverPrinters() in buildPrintAgentScript) en bewaart ze bij het
+// station, zodat de instellingenpagina er een keuzelijst van kan tonen i.p.v.
+// dat Pieter zelf IP-adressen moet opzoeken en overtypen.
+app.post('/api/print-agent/printers', requirePrintAgentToken, (req, res) => {
+  const station = req.printStation;
+  const { printers } = req.body || {};
+  station.detectedPrinters = Array.isArray(printers)
+    ? printers.filter(function(p) { return p && p.ip; }).map(function(p) { return { name: String(p.name || '').trim() || p.ip, ip: String(p.ip).trim() }; })
+    : [];
+  station.lastSeenAt = new Date().toISOString();
+  savePrintStations(printStationsStore);
+  res.json({ ok: true });
 });
 
 app.post('/api/print-agent/jobs/:jobId/ack', requirePrintAgentToken, (req, res) => {
