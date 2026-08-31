@@ -506,9 +506,21 @@ function buildTrunkrsShipmentPayload(order, products, service) {
 const naam = order.addressShippingName || [order.firstname, order.middlename, order.lastname].filter(Boolean).join(' ') || order._klant || order.email || '-';
 const straatRegel = [order.addressShippingStreet, order.addressShippingNumber].filter(Boolean).join(' ') + (order.addressShippingExtension ? (' ' + order.addressShippingExtension) : '');
 const countryCode = (order.addressShippingCountry && (order.addressShippingCountry.code || order.addressShippingCountry.code3)) || 'NL';
+// Let op: reference krijgt bewust een korte unieke suffix i.p.v. kaal
+// String(order.number). Op 2026-08-31 wees Trunkrs een verzendlabel voor
+// ORD80535 af met "Shipment(s) with barcode [ORD80535] is already
+// existing.", terwijl Pieter zowel via een barcode-zoekopdracht als in de
+// volledige recente-zendingenlijst in het echte Trunkrs-portaal geen enkele
+// zending met die referentie kon terugvinden - Trunkrs's eigen
+// dubbel-check op dit veld is dus aantoonbaar niet 1-op-1 betrouwbaar/
+// zichtbaar. Onze eigen bescherming tegen per ongeluk twee keer aanmaken
+// zit voortaan in de route hierboven (trunkrsLabelsStore-check); deze
+// suffix zorgt er alleen voor dat we nooit meer tegen Trunkrs's eigen
+// (kennelijk soms hangende/spook-)blokkade op dit exacte veld aanlopen, nu
+// niet meer voor ORD80535 en ook niet voor toekomstige orders.
 const parcel = {
 description: 'LJ Verzending order ' + order.number,
-reference: String(order.number)
+reference: String(order.number) + '-' + crypto.randomBytes(3).toString('hex')
 };
 // Trunkrs vereist 'weight' op elke parcel, niet alleen bij BE (empirisch
 // vastgesteld op 2026-08-29: INVALID_REQUEST "the key 'weight' is required
@@ -663,6 +675,37 @@ try {
 const orderRes = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + orderId + '.json', { headers: apiHeaders() });
 const order = orderRes.data.order;
 if (!order) return res.status(404).json({ error: 'Order niet gevonden' });
+
+// Eigen idempotentie-check, VOORDAT we Trunkrs uberhaupt aanroepen: als we
+// voor deze order al eerder succesvol een label hebben aangemaakt (staat in
+// trunkrsLabelsStore), geef die gewoon terug i.p.v. opnieuw bij Trunkrs aan
+// te kloppen. Nodig geworden na een geval (ORD80535, 2026-08-31) waarbij
+// Trunkrs's eigen "barcode already existing"-check afging op een referentie
+// die nergens in het Trunkrs-portaal terug te vinden was (dus kennelijk niet
+// betrouwbaar is als bescherming tegen dubbel aanmaken) - zie ook de nieuwe
+// unieke suffix in buildTrunkrsShipmentPayload() hieronder. Zo blijven we
+// zelf in controle over "is dit al aangemaakt?" i.p.v. te vertrouwen op een
+// check aan Trunkrs's kant die aantoonbaar kan haperen.
+const bestaandOrderKey = bareOrderNumberKey(order.number);
+const bestaandLabel = trunkrsLabelsStore[bestaandOrderKey];
+if (bestaandLabel && bestaandLabel.trunkrsNr && !bestaandLabel.cancelledAt) {
+res.json({
+ok: true,
+alreadyExisted: true,
+orderId: order.id,
+trunkrsNr: bestaandLabel.trunkrsNr,
+label: bestaandLabel.label,
+service: bestaandLabel.service,
+autoService: bestaandLabel.autoService,
+state: bestaandLabel.state,
+weightKg: bestaandLabel.weightKg,
+createdAt: bestaandLabel.createdAt,
+lightspeedSync: true,
+lightspeedSyncError: null
+});
+return;
+}
+
 const productsRes = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + orderId + '/products.json', { headers: apiHeaders() });
 const products = productsRes.data.orderProducts || productsRes.data.products || [];
 
