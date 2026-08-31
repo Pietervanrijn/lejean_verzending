@@ -771,6 +771,49 @@ app.get('/api/trunkrs/labels', (req, res) => {
 res.json({ labels: trunkrsLabelsStore });
 });
 
+// Trunkrs levert label.pdf/label.zpl in de praktijk altijd als een https-URL
+// naar hun eigen API (bv. https://api.trunkrs.nl/api/v2/shipments/.../label),
+// die zelf weer met onze x-api-key beveiligd is. Een browser die zo'n URL
+// rechtstreeks opent (window.open) stuurt die header niet mee en krijgt dus
+// "Unauthorized" terug (ontdekt door Pieter bij het printen van ORD80535,
+// 2026-08-31 - de eerste keer dat een echt Trunkrs-label ook echt geopend
+// werd, i.p.v. alleen aangemaakt). Deze route haalt het bestand daarom
+// server-side op (mét de API-key) en stuurt het door naar de browser.
+async function fetchTrunkrsLabelBuffer(url) {
+const r = await axios.get(url, { headers: trunkrsHeaders(), responseType: 'arraybuffer' });
+return Buffer.from(r.data);
+}
+
+app.get('/api/trunkrs/label-file/:orderNumber', async (req, res) => {
+const key = bareOrderNumberKey(req.params.orderNumber);
+const tl = key && trunkrsLabelsStore[key];
+if (!tl || !tl.label) return res.status(404).json({ error: 'Geen label bekend voor deze order.' });
+const format = req.query.format === 'zpl' ? 'zpl' : 'pdf';
+const src = format === 'zpl' ? tl.label.zpl : tl.label.pdf;
+if (!src) return res.status(404).json({ error: 'Geen ' + format.toUpperCase() + '-data bekend voor dit label.' });
+try {
+if (/^https?:/i.test(src)) {
+const buf = await fetchTrunkrsLabelBuffer(src);
+res.set('Content-Type', format === 'zpl' ? 'text/plain; charset=utf-8' : 'application/pdf');
+return res.send(buf);
+}
+// Testdata-fallback (mock-Trunkrs/lokale tests leveren soms al kant-en-
+// klare data zonder tussenliggende URL): een data:-URI voor pdf, of kale
+// ZPL-tekst - beide direct doorsturen, geen extra ophaalstap nodig.
+if (format === 'pdf' && /^data:/i.test(src)) {
+const b64 = src.split(',')[1] || '';
+res.set('Content-Type', 'application/pdf');
+return res.send(Buffer.from(b64, 'base64'));
+}
+res.set('Content-Type', 'text/plain; charset=utf-8');
+return res.send(src);
+} catch (e) {
+const detail = e.response ? JSON.stringify(e.response.data) : e.message;
+console.error('label-file proxy error voor order ' + key + ':', detail);
+res.status(502).json({ error: 'Label ophalen bij Trunkrs mislukt: ' + detail });
+}
+});
+
 // --- Instellingenpaneel: inpakstations beheren (Afdrukopties) ------------
 // Zit achter dezelfde HTTP Basic Auth als de rest van het instellingenpaneel
 // (packgo-medewerkers hierboven volgt hetzelfde patroon).
@@ -971,15 +1014,32 @@ function buildPrintAgentScript(cfg) {
 // naar 1 specifiek inpakstation. Gebruikt de rauwe ZPL die Trunkrs standaard
 // meelevert naast de PDF (zie trunkrsLabelsStore) - geen extra Trunkrs-call
 // of PDF-conversie nodig.
-app.post('/api/print-stations/:id/print-label', (req, res) => {
+app.post('/api/print-stations/:id/print-label', async (req, res) => {
   const station = printStationsStore[req.params.id];
   if (!station) return res.status(404).json({ error: 'Station niet gevonden.' });
   const { orderNumber } = req.body || {};
   const key = bareOrderNumberKey(orderNumber);
   const tl = key && trunkrsLabelsStore[key];
   if (!tl) return res.status(404).json({ error: 'Geen Trunkrs-label bekend voor deze order.' });
-  const zpl = tl.label && tl.label.zpl;
+  let zpl = tl.label && tl.label.zpl;
   if (!zpl) return res.status(422).json({ error: 'Dit label heeft geen ZPL-data (onverwacht - normaal levert Trunkrs dit altijd mee naast de PDF).' });
+  // Trunkrs levert hier in de praktijk een https-URL (net als bij label.pdf,
+  // zie fetchTrunkrsLabelBuffer hierboven), geen kant-en-klare ZPL-tekst. Die
+  // URL zelf naar de printer sturen (de oude aanpak) print geen label maar
+  // letterlijk die URL-tekst - opgemerkt bij het testen van ORD80535
+  // (2026-08-31), toen bleek dat ook het openen van de PDF in de browser om
+  // dezelfde reden (auth) stukliep. Daarom hier eerst de echte ZPL-inhoud
+  // ophalen bij Trunkrs (met x-api-key) voordat we 'm doorsturen naar de
+  // print-agent.
+  if (/^https?:/i.test(zpl)) {
+    try {
+      zpl = (await fetchTrunkrsLabelBuffer(zpl)).toString('utf8');
+    } catch (e) {
+      const detail = e.response ? JSON.stringify(e.response.data) : e.message;
+      console.error('print-label: ZPL ophalen bij Trunkrs mislukt voor order ' + key + ':', detail);
+      return res.status(502).json({ error: 'ZPL ophalen bij Trunkrs mislukt: ' + detail });
+    }
+  }
   const jobId = crypto.randomUUID();
   printJobsStore[jobId] = {
     id: jobId,
