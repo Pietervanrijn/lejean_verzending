@@ -4,6 +4,17 @@ const axios = require('axios');
 const fs = require('fs');
 const crypto = require('crypto');
 const app = express();
+// Railway zet TLS af bij zijn eigen proxy en stuurt intern gewoon HTTP door
+// naar deze container. Zonder "trust proxy" denkt Express daardoor dat elk
+// verzoek plain-HTTP is (req.protocol === "http"), ook als de bezoeker via
+// https:// binnenkwam. Dat gaf op 2026-08-31 een concreet probleem: het
+// gegenereerde print-agent-scriptje (zie buildPrintAgentScript) bakte zijn
+// eigen BASE_URL met "http://", waardoor elk verzoek van het scriptje bij
+// Railway een 301-redirect naar https:// terugkreeg die het scriptje niet
+// volgt - het station kon daardoor nooit printjobs ophalen. Met trust proxy
+// aan leest Express de X-Forwarded-Proto-header van Railway's proxy en klopt
+// req.protocol weer.
+app.set('trust proxy', 1);
 app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.LIGHTSPEED_API_KEY;
