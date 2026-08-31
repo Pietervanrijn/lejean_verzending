@@ -1692,6 +1692,7 @@ return '<div class="print-station-row">' +
 '<span class="settings-hint">' + escapeHtml(s.printerIp) + ':' + escapeHtml(s.printerPort) + ' &middot; ' + escapeHtml(formatLaatstGezien(s.lastSeenAt)) + '</span></div>' +
 '<div class="print-station-actions">' +
 '<button type="button" class="medewerker-edit-btn" onclick="downloadPrintAgent(\'' + s.id + '\')">Download print-agent</button>' +
+'<button type="button" class="medewerker-edit-btn" onclick="downloadPrintAgentLauncher(\'' + s.id + '\')" title="Bestand om op te dubbelklikken i.p.v. zelf Command Prompt te gebruiken">Download start-knop (.bat)</button>' +
 '<button type="button" class="medewerker-delete-btn" onclick="deletePrintStation(\'' + s.id + '\')">Verwijderen</button>' +
 '</div></div>';
 }).join('');
@@ -1727,6 +1728,10 @@ fetch('/api/settings/print-stations/' + encodeURIComponent(id), { method: 'DELET
 
 function downloadPrintAgent(id) {
 window.open('/api/settings/print-stations/' + encodeURIComponent(id) + '/agent-script', '_blank');
+}
+
+function downloadPrintAgentLauncher(id) {
+window.open('/api/settings/print-stations/' + encodeURIComponent(id) + '/agent-launcher.bat', '_blank');
 }
 
 // Gebruikt vanaf overal in de app (Pack & Go zelf, maar ook de knoppen in
