@@ -2340,7 +2340,13 @@ loadOrders();
 // van Pieter, 2026-08-30). Slaat een cyclus over zolang er een modal open
 // staat (labeldetails, instellingen, PIN-inlog), zodat dat scherm niet
 // onderuit gehaald wordt terwijl iemand ermee bezig is.
-var AUTO_REFRESH_MS = 30000;
+// Was 30000 (30s). Ontdekt op 2026-08-30: elke ververs-cyclus deed server-
+// side ook een Lightspeed-aanroep per order (voor het aantal artikelen), wat
+// bij tientallen orders + meerdere open tabbladen binnen enkele minuten tot
+// herhaalde 429's (rate limit) bij Lightspeed leidde, waardoor orders
+// helemaal niet meer verschenen. Dat is nu ook server-side opgelost (caching
+// in server.js), maar de interval blijft voor de zekerheid op 60s i.p.v. 30s.
+var AUTO_REFRESH_MS = 60000;
 setInterval(function() {
 if (document.querySelector('.modal-overlay.open')) return;
 loadOrders();
