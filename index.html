@@ -1454,7 +1454,7 @@ body: JSON.stringify({ orderId: packGoCurrent.order.id, serviceOverride: service
 });
 var data = await res.json();
 if (!res.ok) throw new Error(data.error || 'Onbekende fout');
-var labelHref = data.label ? resolveLabelPdfUrl(data.label.pdf) : '';
+var labelHref = data.label ? resolveLabelPdfUrl(data.label.pdf, packGoCurrent.order._ordNummer || packGoCurrent.order.number) : '';
 var syncWarning = data.lightspeedSync ? '' : '<div class="packgo-warning-box">Let op: het is niet gelukt om de tracking automatisch in Lightspeed te zetten (' + escapeHtml(data.lightspeedSyncError || 'onbekende fout') + '). Zet het trackingnummer handmatig in de order.</div>';
 var thisOrdNummer = String(packGoCurrent.order._ordNummer || packGoCurrent.order.number);
 labelResultBox.innerHTML =
@@ -2075,12 +2075,18 @@ c.innerHTML = '<div class="orders-table-wrap"><table class="orders-table"><thead
 }
 
 // Trunkrs levert label.pdf in de praktijk altijd als een echte https-URL
-// (bevestigd 2026-08-29). Deze helper vangt ook een kale base64-string op
-// (zoals mock-/testdata dat soms doet) zonder een dubbel "data:"-prefix te
-// plakken als het al een data:-URL is.
-function resolveLabelPdfUrl(pdf) {
+// (bevestigd 2026-08-29) - maar die URL is zelf weer beveiligd met een
+// x-api-key header die een browser niet kan meesturen bij een gewone
+// window.open. Rechtstreeks openen gaf daardoor "Unauthorized" (ontdekt bij
+// het printen van ORD80535, 2026-08-31). Voor zo'n Trunkrs-URL gaan we
+// daarom via onze eigen server-route die het bestand met de API-key ophaalt
+// en doorstuurt (zie /api/trunkrs/label-file/:orderNumber in server.js).
+// Testdata (een kale base64-string, zoals mock-/lokale tests dat soms
+// leveren) blijft direct als data:-URL werken, zonder extra ophaalstap.
+function resolveLabelPdfUrl(pdf, ordNummer) {
 if (!pdf) return null;
-return /^(https?:|data:)/i.test(pdf) ? pdf : ('data:application/pdf;base64,' + pdf);
+if (/^https?:/i.test(pdf)) return '/api/trunkrs/label-file/' + encodeURIComponent(bareOrderNummer(ordNummer)) + '?format=pdf';
+return /^data:/i.test(pdf) ? pdf : ('data:application/pdf;base64,' + pdf);
 }
 
 // Haalt de label-PDF-URL op voor een order (uit reeds geladen data) en
@@ -2088,7 +2094,7 @@ return /^(https?:|data:)/i.test(pdf) ? pdf : ('data:application/pdf;base64,' + p
 function printLabelForOrder(ordNummer) {
 var o = findOrderByOrdNummer(ordNummer) || (packGoCurrent && String(packGoCurrent.order._ordNummer || packGoCurrent.order.number) === String(ordNummer) ? packGoCurrent.order : null);
 var tl = o && o._trunkrsLabel;
-var url = tl && tl.label ? resolveLabelPdfUrl(tl.label.pdf) : null;
+var url = tl && tl.label ? resolveLabelPdfUrl(tl.label.pdf, ordNummer) : null;
 if (!url) { alert('Geen label-URL gevonden voor deze order.'); return; }
 ensurePackGoNaam(function(naam) {
 if (!naam) return;
@@ -2151,7 +2157,7 @@ if (!naam) return;
 nums.forEach(function(num) {
 var o = findOrderByOrdNummer(num);
 var tl = o && o._trunkrsLabel;
-var url = tl && tl.label ? resolveLabelPdfUrl(tl.label.pdf) : null;
+var url = tl && tl.label ? resolveLabelPdfUrl(tl.label.pdf, num) : null;
 if (url) markPrintedAndOpen(num, url, naam);
 });
 });
@@ -2247,7 +2253,7 @@ var serviceLabel = tl.service === 'SAME_DAY' ? 'Trunkrs Same Day Delivery' : 'Tr
 var zst = formatZendingStatus(tl.state && tl.state.code);
 var postcode = o.addressShippingZipcode || o.addressBillingZipcode || '';
 var trackUrl = trunkrsTrackingUrl(tl.trunkrsNr, postcode);
-var labelUrl = tl.label ? resolveLabelPdfUrl(tl.label.pdf) : null;
+var labelUrl = tl.label ? resolveLabelPdfUrl(tl.label.pdf, o._ordNummer || o.number) : null;
 var ordNumSafe = escapeHtml(String(o._ordNummer || o.number));
 
 body.innerHTML =
