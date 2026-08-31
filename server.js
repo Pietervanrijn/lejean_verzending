@@ -284,6 +284,26 @@ async function mapWithConcurrency(items, limit, fn) {
   return results;
 }
 
+// --- Caches om Lightspeed rate-limiting (429) te voorkomen ----------------
+// Ontdekt op 2026-08-30: bij ELKE keer dat /api/orders werd opgehaald (elke
+// 30s door de auto-refresh in index.html, per open tabblad) werd voor ELKE
+// order opnieuw de productenlijst bij Lightspeed opgehaald (voor het
+// aantal artikelen), en voor elke order die al buiten de "inkomend"-status
+// viel (label/verzonden/geannuleerd) óók nog eens de volledige orderdata.
+// Bij tientallen orders x meerdere open tabbladen liep dit binnen enkele
+// minuten tegen Lightspeed's rate limit aan. Zodra dat gebeurde faalde
+// fetchOrders() zelf óók (dezelfde rate limit), waardoor alle tabs leeg
+// leken ("geen orders gevonden") - dit is de oorzaak van het "ik zie geen
+// orders"-probleem.
+// Productdata en orderdata van een reeds geplaatste order veranderen in de
+// praktijk niet meer, dus we cachen ze hier in het geheugen: 1x per
+// serverstart ophalen bij Lightspeed i.p.v. elke 30 seconden opnieuw. Wordt
+// automatisch leeggemaakt bij een herstart/nieuwe deploy. Als een order-detail
+// toch een keer handmatig gecorrigeerd moet worden: de Railway-service
+// herstarten leegt deze cache.
+const orderProductsSummaryCache = new Map(); // orderId -> {itemCount, quantityOrdered}
+const orderDetailCache = new Map(); // orderId -> volledig order-object van Lightspeed
+
 async function fetchOrders() {
 const statuses = ['processing_awaiting_shipment', 'processing_awaiting_pickup'];
 let all = [];
@@ -343,9 +363,10 @@ if (!id) {
 console.error('fetchLocallyTrackedMissingOrders: geen bekend order-id voor order ' + num + ', kan niet opzoeken.');
 continue;
 }
+if (orderDetailCache.has(id)) { extra.push(orderDetailCache.get(id)); continue; }
 try {
 const r = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + id + '.json', { headers: apiHeaders() });
-if (r.data.order) extra.push(r.data.order);
+if (r.data.order) { orderDetailCache.set(id, r.data.order); extra.push(r.data.order); }
 } catch(e) {
 console.error('fetchLocallyTrackedMissingOrders error voor order ' + num + ' (id ' + id + '):', e.message);
 }
@@ -354,14 +375,19 @@ return extra;
 }
 
 async function fetchOrderProductsSummary(orderId) {
+if (orderProductsSummaryCache.has(orderId)) return orderProductsSummaryCache.get(orderId);
 try {
 const r = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + orderId + '/products.json', { headers: apiHeaders() });
 const products = r.data.orderProducts || r.data.products || [];
 const itemCount = products.length;
 const quantityOrdered = products.reduce(function(s,p){ return s + (p.quantityOrdered || 0); }, 0);
-return { itemCount: itemCount, quantityOrdered: quantityOrdered };
+const result = { itemCount: itemCount, quantityOrdered: quantityOrdered };
+orderProductsSummaryCache.set(orderId, result);
+return result;
 } catch(e) {
 console.error('fetchOrderProductsSummary error:', e.message);
+// Bewust NIET cachen: bij een tijdelijke fout (bv. 429) mag een
+// volgende poll het alsnog opnieuw proberen i.p.v. voorgoed "null" te tonen.
 return { itemCount: null, quantityOrdered: null };
 }
 }
@@ -476,12 +502,33 @@ service: service
 
 app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
 
+// Korte gedeelde cache + samenvoeging van gelijktijdige aanvragen: als
+// meerdere tabbladen/medewerkers (of de auto-refresh + een handmatige klik)
+// toevallig tegelijk verversen, start dit maar 1x een volledige Lightspeed-
+// ronde i.p.v. elke aanvraag apart - scheelt nog eens extra belasting bovenop
+// de caches in fetchOrderProductsSummary/fetchLocallyTrackedMissingOrders.
+let ordersResultCache = { data: null, ts: 0 };
+let ordersFetchInFlight = null;
+const ORDERS_CACHE_MS = 10000;
+
 app.get('/api/orders', async (req, res) => {
 try {
+const now = Date.now();
+if (ordersResultCache.data && (now - ordersResultCache.ts) < ORDERS_CACHE_MS) {
+return res.json(ordersResultCache.data);
+}
+if (!ordersFetchInFlight) {
+ordersFetchInFlight = (async () => {
 const orders = await fetchOrders();
 const enriched = await enrichOrders(orders);
 const methods = [...new Set(enriched.map(o => o._shippingMethod).filter(Boolean))].sort();
-res.json({ orders: enriched, total: enriched.length, shippingMethods: methods });
+const payload = { orders: enriched, total: enriched.length, shippingMethods: methods };
+ordersResultCache = { data: payload, ts: Date.now() };
+return payload;
+})().finally(() => { ordersFetchInFlight = null; });
+}
+const payload = await ordersFetchInFlight;
+res.json(payload);
 } catch(e) {
 console.error('API error:', e.message);
 res.status(500).json({ error: e.message });
