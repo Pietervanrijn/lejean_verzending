@@ -1337,6 +1337,30 @@ var safeMethod = method.replace(/[\\\/:*?"<>|]/g, '').trim();
 var filename = safeMethod + ' ' + countData.count + '.xlsx';
 
 XLSX.writeFile(wb, filename);
+
+// Net als bij het aanmaken van een Trunkrs-label: zodra de verzendinformatie
+// is aangemaakt, de order in Lightspeed en lokaal op "verzonden" zetten i.p.v.
+// dat iemand dat later nog handmatig moet doen. Los van de export zelf
+// (die is al gelukt/gedownload) zodat een sync-fout hier niet als een
+// mislukte export overkomt.
+try {
+var markRes = await fetch('/api/orders/mark-shipped', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orderIds: orders.map(function(o){ return o.id; }) }) });
+var markData = await markRes.json().catch(function(){ return {}; });
+var failed = (markData.results || []).filter(function(r){ return !r.ok; });
+
+var bareNums = orders.map(function(o){ return bareOrderNummer(o._ordNummer || o.number); });
+await fetch('/api/order-status', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orderNumbers: bareNums, status: 'verzonden' }) });
+orders.forEach(function(o) {
+o._orderStatus = 'verzonden';
+});
+applyFilter();
+
+if (failed.length) {
+alert('Verzendinformatie is aangemaakt en orders zijn lokaal op "verzonden" gezet, maar het is niet gelukt om de status in Lightspeed aan te passen voor ' + failed.length + ' order(s). Zet die eventueel handmatig op "verzonden" in Lightspeed.');
+}
+} catch(e) {
+alert('Verzendinformatie is aangemaakt, maar het bijwerken van de status is mislukt: ' + e.message);
+}
 } catch(e) {
 alert('Fout bij genereren Verzendinformatie: ' + e.message);
 }

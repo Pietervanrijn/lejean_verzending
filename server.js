@@ -680,6 +680,31 @@ results.push({ id, ok: false, error: e.message });
 res.json({ results });
 });
 
+// Beste-poging, zelfde patroon als syncTrunkrsToLightspeed hieronder, maar dan
+// voor vervoerders zonder eigen carrier-API-koppeling (Chill-Bill/DAGBEZORGING):
+// op het moment dat de Verzendinformatie-export voor zulke orders wordt
+// gegenereerd, zet dit de Lightspeed-shipment toch op "shipped" - net als bij
+// het aanmaken van een Trunkrs-label. Geen trackingCode: die heeft Chill-Bill
+// niet. Mag per order falen zonder de andere orders in de batch te blokkeren.
+app.post('/api/orders/mark-shipped', async (req, res) => {
+const { orderIds } = req.body || {};
+if (!Array.isArray(orderIds) || !orderIds.length) return res.status(400).json({ error: 'orderIds verplicht' });
+const results = [];
+for (const id of orderIds) {
+try {
+const shipRes = await axios.get('https://api.webshopapp.com/' + SHOP + '/shipments.json', { headers: apiHeaders(), params: { order: id } });
+const shipment = shipRes.data.shipments && shipRes.data.shipments[0];
+if (!shipment) { results.push({ id, ok: false, error: 'geen shipment gevonden voor order ' + id }); continue; }
+await axios.put('https://api.webshopapp.com/' + SHOP + '/shipments/' + shipment.id + '.json', { shipment: { status: 'shipped' } }, { headers: apiHeaders() });
+results.push({ id, ok: true });
+} catch(e) {
+console.error('mark-shipped error for order ' + id + ':', e.response ? JSON.stringify(e.response.data) : e.message);
+results.push({ id, ok: false, error: e.message });
+}
+}
+res.json({ results });
+});
+
 // Beste-poging: schrijft trunkrsNr/tracking terug naar de Lightspeed-order
 // (zichtbaar bij "Verzending" in de Back Office) en zet de shipment op
 // "verzonden". De exacte veldnamen (status/trackingCode) zijn nog niet
