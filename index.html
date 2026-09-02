@@ -102,7 +102,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .packgo-scan-input:focus{border-color:#f0821e}
 .packgo-scan-error{color:#c62828;font-size:13px;font-weight:600;margin-top:10px;min-height:18px}
 .packgo-card{background:#fff;border-radius:12px;padding:24px 30px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
-.packgo-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid #f6f5f0}
+.packgo-card-head{margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid #f6f5f0}
 .packgo-order-num{font-size:22px;font-weight:800;color:#33401f}
 .packgo-ship-line{display:flex;align-items:center;gap:10px;margin-top:8px}
 .packgo-klant{color:#1565c0;font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px}
@@ -114,8 +114,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .packgo-service-value{font-weight:700;font-size:15px}
 .packgo-service-value.frozen{color:#1565c0}
 .packgo-service-value.houdbaar{color:#2e7d32}
-.packgo-override{display:flex;align-items:center;gap:8px;font-size:13px;color:#555;cursor:pointer;user-select:none}
-.packgo-create-btn{background:#f0821e;color:#fff;border:none;padding:12px 28px;border-radius:24px;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;width:100%}
+.packgo-create-btn{background:#f0821e;color:#fff;border:none;padding:11px 26px;border-radius:24px;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap}
 .packgo-create-btn:hover:not(:disabled){background:#f5a04a}
 .packgo-create-btn:disabled{opacity:.5;cursor:not-allowed}
 .packgo-success-box{background:#e8f5e9;border-radius:10px;padding:18px 20px;margin-top:16px}
@@ -126,6 +125,36 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .packgo-label-link:hover{background:#242d15}
 .packgo-next-btn{background:transparent;border:1.5px solid #ccc;color:#555;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;margin-top:14px}
 .packgo-next-btn:hover{border-color:#33401f;color:#33401f}
+/* Pack & Go: "Single scan"-schakelaar + herontwerp van de lege/geladen
+   status, naar het voorbeeld van Sendcloud's Pack & Go-scherm (2026-09-02). */
+.packgo-topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.packgo-topbar-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.packgo-topbar-label{font-size:14px;font-weight:700;color:#33401f}
+.packgo-info-link{background:none;border:none;color:#1565c0;font-size:13px;font-weight:600;cursor:pointer;padding:0}
+.packgo-info-link:hover{text-decoration:underline}
+.pg-toggle{position:relative;display:inline-block;width:42px;height:24px;cursor:pointer;flex-shrink:0}
+.pg-toggle input{position:absolute;opacity:0;inset:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:1}
+.pg-toggle-track{position:absolute;inset:0;background:#ccc;border-radius:12px;transition:background .2s;pointer-events:none}
+.pg-toggle-thumb{position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3);pointer-events:none}
+.pg-toggle input:checked + .pg-toggle-track{background:#f0821e}
+.pg-toggle input:checked + .pg-toggle-track + .pg-toggle-thumb{transform:translateX(18px)}
+.packgo-searchbar{display:flex;align-items:stretch}
+.packgo-searchbar .packgo-scan-input{border-radius:10px 0 0 10px}
+.packgo-search-btn{background:#33401f;color:#fff;border:none;border-radius:0 10px 10px 0;padding:0 22px;font-size:17px;cursor:pointer;transition:background .2s}
+.packgo-search-btn:hover{background:#242d15}
+.packgo-empty{text-align:center;padding:64px 20px 56px}
+.packgo-empty-icon{margin-bottom:18px;display:flex;justify-content:center}
+.packgo-empty h3{font-size:19px;color:#33401f;margin-bottom:10px}
+.packgo-empty p{font-size:14px;line-height:1.6;color:#777;max-width:440px;margin:0 auto}
+.packgo-empty a{color:#1565c0;font-weight:600;text-decoration:none;cursor:pointer}
+.packgo-empty a:hover{text-decoration:underline}
+.packgo-head-row1{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.packgo-head-row2{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:10px;flex-wrap:wrap}
+.packgo-head-actions{display:flex;align-items:center;gap:10px}
+.packgo-edit-btn{background:transparent;border:1.5px solid #ddd;color:#555;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+.packgo-edit-btn:hover{border-color:#33401f;color:#33401f}
+.packgo-unique-count{font-size:13px;font-weight:500;color:#888;margin-left:4px}
+.packgo-qty-badge{background:#33401f;color:#fff;font-weight:800;font-size:13px;border-radius:8px;padding:2px 10px;display:inline-block;min-width:24px;text-align:center}
 .label-toolbar{background:#fff;border-radius:12px;padding:16px 24px;margin-bottom:20px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-wrap:wrap}
 .label-search-input{background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:6px;padding:8px 18px;font-size:14px;color:#333;outline:none;min-width:240px;transition:border-color .2s;font-family:inherit}
 .label-search-input:focus{border-color:#f0821e}
@@ -196,7 +225,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .packgo-login-error{color:#c62828;font-size:13px;font-weight:600;margin-top:6px;min-height:16px;text-align:center}
 .packgo-session-bar{display:flex;align-items:center;justify-content:space-between;background:#fff;border-radius:12px;padding:12px 20px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);font-size:13px;color:#555}
 .packgo-session-bar b{color:#33401f}
-.packgo-switch-link{color:#1565c0;background:none;border:none;cursor:pointer;font-size:13px;font-weight:600;padding:0}
+.packgo-switch-link{color:#1565c0;background:none;border:none;cursor:pointer;font-size:13px;font-weight:600;padding:0;margin-left:6px}
 .packgo-switch-link:hover{text-decoration:underline}
 .settings-gear-btn{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.4);width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
 .settings-gear-btn:hover{background:rgba(255,255,255,.15);border-color:#fff}
@@ -373,13 +402,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div id="packGoLoginError" class="packgo-login-error"></div>
 </div>
 <div id="packGoMain" style="display:none">
+<div class="packgo-topbar">
+<div class="packgo-topbar-left">
+<label class="pg-toggle" title="Single scan">
+<input type="checkbox" id="packGoSingleScanToggle">
+<span class="pg-toggle-track"></span>
+<span class="pg-toggle-thumb"></span>
+</label>
+<span class="packgo-topbar-label">Single scan</span>
+<button type="button" class="packgo-info-link" onclick="openPackGoInfoModal()">(Wat is single scan?)</button>
+</div>
 <div class="packgo-session-bar">Ingelogd als <b id="packGoSessionNaam"></b><button type="button" class="packgo-switch-link" onclick="packGoLogout()">Wisselen</button></div>
+</div>
 <div class="packgo-scan-box">
-<label for="packGoScanInput" class="packgo-scan-label">Scan de barcode op de pakbon</label>
-<input type="text" id="packGoScanInput" class="packgo-scan-input" placeholder="Scan hier of typ PS-code en druk op Enter&hellip;" autocomplete="off">
+<label for="packGoScanInput" class="packgo-scan-label">Scan de barcode op de pakbon, of typ het ordernummer</label>
+<div class="packgo-searchbar">
+<input type="text" id="packGoScanInput" class="packgo-scan-input" placeholder="Scan hier, of typ een ordernummer/PS-code en druk op Enter&hellip;" autocomplete="off">
+<button type="button" class="packgo-search-btn" onclick="packGoManualSubmit()" title="Zoeken" aria-label="Zoeken">&#128269;</button>
+</div>
 <div id="packGoScanError" class="packgo-scan-error"></div>
 </div>
 <div id="packGoResult"></div>
+</div>
+</div>
+<div class="modal-overlay" id="packGoInfoModal">
+<div class="modal-panel" style="max-width:440px">
+<h3 style="margin-bottom:10px;color:#33401f;font-size:16px">Wat is single scan?</h3>
+<p style="font-size:13.5px;color:#555;line-height:1.55;margin-bottom:10px"><b>Standaardmodus (2 scans):</b> de eerste scan (of het intypen van het ordernummer) toont de order, zodat je de verzendservice nog kunt controleren of aanpassen (potloodje). Scan dezelfde barcode nogmaals, of klik op &ldquo;Label aanmaken&rdquo;, om te bevestigen.</p>
+<p style="font-size:13.5px;color:#555;line-height:1.55;margin-bottom:18px"><b>Single scan:</b> met &eacute;&eacute;n scan wordt de order gezocht &eacute;n meteen het verzendlabel aangemaakt &mdash; geen tussenstap nodig. Heeft de order al een label, dan wordt uit voorzorg niet automatisch nog een label aangemaakt en zie je de kaart alsnog ter controle.</p>
+<button type="button" class="packgo-login-btn" onclick="closePackGoInfoModal()">Sluiten</button>
 </div>
 </div>
 <div class="modal-overlay" id="medewerkerLoginModal">
@@ -1392,7 +1443,8 @@ return isHoudbaarArticleCodeClient(p.articleCode || p.sku || p.itemNumber || p.e
 return alleHoudbaar ? 'SAME_DAY' : 'SAME_DAY_FROZEN_FOOD';
 }
 
-var packGoCurrent = null; // { order, products, autoService }
+var packGoCurrent = null; // { order, products, autoService, labelCreated }
+var packGoOverrideOpen = false; // UI-state van het potloodje (service handmatig aanpassen), per kaart
 
 function initPackGoScanner() {
 var input = document.getElementById('packGoScanInput');
@@ -1400,11 +1452,69 @@ if (!input) return;
 input.addEventListener('keydown', function(e) {
 if (e.key === 'Enter') {
 e.preventDefault();
+packGoManualSubmit();
+}
+});
+}
+
+function packGoManualSubmit() {
+var input = document.getElementById('packGoScanInput');
+if (!input) return;
 var value = input.value.trim();
 input.value = '';
 if (value) handlePackGoScan(value);
 }
-});
+
+// "Single scan"-voorkeur: lokaal per werkstation onthouden (localStorage,
+// niet sessionStorage) zodat de schakelaar niet steeds terug hoeft na een
+// paginaverversing. Puur een UI/workflow-voorkeur, geen gevoelige data.
+function getPackGoSingleScanMode() {
+try { return localStorage.getItem('lj_packgo_single_scan') === '1'; } catch(e) { return false; }
+}
+function setPackGoSingleScanMode(on) {
+try { localStorage.setItem('lj_packgo_single_scan', on ? '1' : '0'); } catch(e) {}
+}
+function initPackGoSingleScanToggle() {
+var cb = document.getElementById('packGoSingleScanToggle');
+if (!cb) return;
+cb.checked = getPackGoSingleScanMode();
+cb.addEventListener('change', function() { setPackGoSingleScanMode(cb.checked); });
+}
+function openPackGoInfoModal() {
+var overlay = document.getElementById('packGoInfoModal');
+if (overlay) overlay.classList.add('open');
+}
+function closePackGoInfoModal() {
+var overlay = document.getElementById('packGoInfoModal');
+if (overlay) overlay.classList.remove('open');
+}
+
+// Simpel, eigen (niet van Sendcloud overgenomen) illustratie-icoontje voor de
+// lege status: een doos met een streepjescode eronder, in de eigen huisstijl-
+// kleuren.
+var PACKGO_EMPTY_SVG = '<svg width="88" height="88" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+'<circle cx="48" cy="48" r="48" fill="#fdecd9"/>' +
+'<rect x="26" y="32" width="44" height="30" rx="4" fill="#fff" stroke="#f0821e" stroke-width="2.5"/>' +
+'<path d="M26 42h44" stroke="#f0821e" stroke-width="2.5"/>' +
+'<path d="M40 32v10M56 32v10" stroke="#f0821e" stroke-width="2.5"/>' +
+'<rect x="33" y="68" width="2.5" height="13" fill="#33401f"/>' +
+'<rect x="38.5" y="68" width="1.5" height="13" fill="#33401f"/>' +
+'<rect x="42.5" y="68" width="3" height="13" fill="#33401f"/>' +
+'<rect x="48.5" y="68" width="1.5" height="13" fill="#33401f"/>' +
+'<rect x="52.5" y="68" width="2.5" height="13" fill="#33401f"/>' +
+'<rect x="57.5" y="68" width="1.5" height="13" fill="#33401f"/>' +
+'<rect x="61.5" y="68" width="3" height="13" fill="#33401f"/>' +
+'</svg>';
+
+function packGoRenderEmptyState() {
+var resultBox = document.getElementById('packGoResult');
+if (!resultBox) return;
+resultBox.innerHTML =
+'<div class="packgo-empty">' +
+'<div class="packgo-empty-icon">' + PACKGO_EMPTY_SVG + '</div>' +
+'<h3>Scan een order</h3>' +
+'<p>Scan de streepjescode op de pakbon, of typ het ordernummer hierboven in het zoekveld. Pakbonnen maak je aan via <a onclick="switchTab(\'inkomend\')">Inkomende orders</a>.</p>' +
+'</div>';
 }
 
 function parsePakbonBarcode(raw) {
@@ -1426,7 +1536,6 @@ return String(o.id) === idStr || parseInt(o.id, 10) === num || String(o.number) 
 
 async function handlePackGoScan(rawValue) {
 var errorBox = document.getElementById('packGoScanError');
-var resultBox = document.getElementById('packGoResult');
 errorBox.textContent = '';
 var idStr = parsePakbonBarcode(rawValue);
 var order = findOrderByScannedId(idStr);
@@ -1434,13 +1543,39 @@ if (!order) {
 errorBox.textContent = 'Geen order gevonden voor gescande code "' + rawValue + '".';
 return;
 }
+
+// Standaardmodus (Single scan uit): een TWEEDE scan van dezelfde, nog niet
+// bevestigde order geldt als bevestiging - net als in het Sendcloud-
+// voorbeeld ("de tweede scan bevestigt alle wijzigingen en drukt vervolgens
+// het label af"). De knop "Label aanmaken" blijft daarnaast ook gewoon
+// werken. In Single scan-modus slaan we deze tussenstap altijd over (zie
+// loadPackGoOrder hieronder), dus dan komt dit pad niet voor.
+if (!getPackGoSingleScanMode() && packGoCurrent && !packGoCurrent.labelCreated &&
+String(packGoCurrent.order.id) === String(order.id)) {
+packGoCreateLabel();
+return;
+}
+
+await loadPackGoOrder(order);
+}
+
+async function loadPackGoOrder(order) {
+var resultBox = document.getElementById('packGoResult');
 resultBox.innerHTML = '<div class="packgo-card"><p>Producten laden&hellip;</p></div>';
 try {
 var res = await fetch('/api/orders/' + order.id + '/products');
 var data = await res.json();
 var products = data.products || [];
-packGoCurrent = { order: order, products: products, autoService: bepaalTrunkrsServiceClient(products) };
+packGoCurrent = { order: order, products: products, autoService: bepaalTrunkrsServiceClient(products), labelCreated: false };
 renderPackGoOrder();
+// Single scan: 1 scan zoekt de order EN maakt meteen het label aan, zonder
+// tussenstap. Uitzondering: heeft de order al een label (bv. per ongeluk
+// twee keer gescand), dan NIET automatisch nog een label aanmaken - de
+// kaart blijft dan gewoon staan met de bestaande waarschuwing, zodat een
+// dubbele Trunkrs-zending altijd een bewuste, handmatige actie blijft.
+if (getPackGoSingleScanMode() && !order._trunkrsLabel) {
+packGoCreateLabel();
+}
 } catch(e) {
 resultBox.innerHTML = '<div class="packgo-card"><div class="packgo-error-box">Kon producten niet ophalen: ' + escapeHtml(e.message) + '</div></div>';
 }
@@ -1448,19 +1583,21 @@ resultBox.innerHTML = '<div class="packgo-card"><div class="packgo-error-box">Ko
 
 function renderPackGoOrder() {
 var resultBox = document.getElementById('packGoResult');
-if (!packGoCurrent) { resultBox.innerHTML = ''; return; }
+if (!packGoCurrent) { packGoRenderEmptyState(); return; }
 var order = packGoCurrent.order, products = packGoCurrent.products, autoService = packGoCurrent.autoService;
 var countryCode = (order.addressShippingCountry && (order.addressShippingCountry.code || order.addressShippingCountry.code3) || '').toUpperCase();
 var flag = getFlagEmoji(countryCode);
 var klant = escapeHtml(order.addressShippingName || order._klant || '-');
-var shipSafe = escapeHtml(order._shippingMethod || '-');
 var alreadyLabel = order._trunkrsLabel;
 
+var totalQty = 0;
 var rows = products.map(function(p) {
 var title = escapeHtml((p.productTitle || p.title || p.fulltitle || p.name || '-') + (p.variantTitle ? ' | ' + p.variantTitle : ''));
-var sku = escapeHtml(p.articleCode || p.sku || p.ean || p.ean13 || p.code || p.itemNumber || '-');
-var qty = p.quantityOrdered || p.quantity || p.amount || 1;
-return '<tr><td>' + title + '</td><td>' + sku + '</td><td>' + qty + '</td></tr>';
+var ean = escapeHtml(p.ean || p.ean13 || '-');
+var sku = escapeHtml(p.articleCode || p.sku || p.code || p.itemNumber || '-');
+var qty = parseInt(p.quantityOrdered || p.quantity || p.amount || 1, 10) || 1;
+totalQty += qty;
+return '<tr><td>' + title + '</td><td>' + ean + '</td><td>' + sku + '</td><td><span class="packgo-qty-badge">' + qty + '</span></td></tr>';
 }).join('');
 
 var serviceLabel = autoService === 'SAME_DAY' ? 'Houdbaar' : 'Frozen';
@@ -1468,18 +1605,27 @@ var serviceClass = autoService === 'SAME_DAY' ? 'houdbaar' : 'frozen';
 
 var alreadyHtml = alreadyLabel ? '<div class="packgo-warning-box">Deze order heeft al een Trunkrs-label (Trunkrs-nr ' + escapeHtml(alreadyLabel.trunkrsNr) + '). Opnieuw aanmaken maakt een nieuwe zending aan bij Trunkrs.</div>' : '';
 
+packGoOverrideOpen = false;
+
 resultBox.innerHTML =
 '<div class="packgo-card">' +
 '<div class="packgo-card-head">' +
-'<div><div class="packgo-order-num">' + escapeHtml(order._ordNummer || order.number) + '</div>' +
-'<div class="packgo-ship-line">' + shipMethodBadgeHtml(order) + '</div></div>' +
-'<div><div class="packgo-klant">' + (flag || '') + klant + '</div></div>' +
+'<div class="packgo-head-row1">' +
+'<div class="packgo-order-num">' + escapeHtml(order._ordNummer || order.number) + ' <span class="packgo-unique-count">(' + products.length + ' ' + (products.length === 1 ? 'uniek artikel' : 'unieke artikelen') + ')</span></div>' +
+'<div class="packgo-head-actions">' +
+'<button type="button" class="packgo-edit-btn" onclick="togglePackGoOverride()" title="Verzendservice aanpassen" aria-label="Verzendservice aanpassen">&#9998;</button>' +
+'<button type="button" class="packgo-create-btn" id="packGoCreateBtn" onclick="packGoCreateLabel()">Label aanmaken</button>' +
 '</div>' +
-'<table class="packgo-items-table"><thead><tr><th>Item</th><th>SKU</th><th>Aantal</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+'</div>' +
+'<div class="packgo-head-row2">' +
+'<div class="packgo-ship-line">' + shipMethodBadgeHtml(order) + '</div>' +
+'<div class="packgo-klant">' + (flag || '') + klant + '</div>' +
+'</div>' +
+'</div>' +
+'<table class="packgo-items-table"><thead><tr><th>Item</th><th>EAN</th><th>SKU</th><th>Aantal (' + totalQty + ')</th></tr></thead><tbody>' + rows + '</tbody></table>' +
 '<div class="packgo-service-box">' +
 '<div><div class="packgo-service-label">Automatisch bepaald (op basis van artikelnummers 8000-9000 = houdbaar)</div>' +
 '<div class="packgo-service-value ' + serviceClass + '" id="packGoServiceValue">' + serviceLabel + '</div></div>' +
-'<label class="packgo-override"><input type="checkbox" id="packGoOverrideCheck" onchange="togglePackGoOverride()"> Handmatig overschrijven</label>' +
 '</div>' +
 '<div id="packGoOverrideBox" style="display:none;margin-bottom:16px">' +
 '<select class="filter-select" id="packGoOverrideSelect" onchange="updatePackGoServicePreview()">' +
@@ -1487,24 +1633,24 @@ resultBox.innerHTML =
 '<option value="SAME_DAY_FROZEN_FOOD">Frozen (SAME_DAY_FROZEN_FOOD)</option>' +
 '</select></div>' +
 alreadyHtml +
-'<button type="button" class="packgo-create-btn" id="packGoCreateBtn" onclick="packGoCreateLabel()">Label aanmaken</button>' +
-'<div id="packGoLabelResult"></div>';
+'<div id="packGoLabelResult"></div>' +
+'</div>';
 
 var overrideSelect = document.getElementById('packGoOverrideSelect');
 if (overrideSelect) overrideSelect.value = autoService;
 }
 
 function togglePackGoOverride() {
-var checked = document.getElementById('packGoOverrideCheck').checked;
-document.getElementById('packGoOverrideBox').style.display = checked ? 'block' : 'none';
+packGoOverrideOpen = !packGoOverrideOpen;
+var box = document.getElementById('packGoOverrideBox');
+if (box) box.style.display = packGoOverrideOpen ? 'block' : 'none';
 updatePackGoServicePreview();
 }
 
 function updatePackGoServicePreview() {
-var checked = document.getElementById('packGoOverrideCheck').checked;
 var valueEl = document.getElementById('packGoServiceValue');
 if (!valueEl || !packGoCurrent) return;
-var service = checked ? document.getElementById('packGoOverrideSelect').value : packGoCurrent.autoService;
+var service = packGoOverrideOpen ? document.getElementById('packGoOverrideSelect').value : packGoCurrent.autoService;
 valueEl.textContent = service === 'SAME_DAY' ? 'Houdbaar' : 'Frozen';
 valueEl.className = 'packgo-service-value ' + (service === 'SAME_DAY' ? 'houdbaar' : 'frozen');
 }
@@ -1512,8 +1658,7 @@ valueEl.className = 'packgo-service-value ' + (service === 'SAME_DAY' ? 'houdbaa
 async function packGoCreateLabel() {
 if (!packGoCurrent) return;
 var btn = document.getElementById('packGoCreateBtn');
-var overrideChecked = document.getElementById('packGoOverrideCheck').checked;
-var serviceOverride = overrideChecked ? document.getElementById('packGoOverrideSelect').value : null;
+var serviceOverride = packGoOverrideOpen ? document.getElementById('packGoOverrideSelect').value : null;
 btn.disabled = true;
 btn.textContent = 'Bezig met aanmaken&hellip;';
 var labelResultBox = document.getElementById('packGoLabelResult');
@@ -1535,6 +1680,10 @@ labelResultBox.innerHTML =
 (labelHref ? '<br><button type="button" class="packgo-label-link" onclick="printLabelForOrder(\'' + escapeHtml(thisOrdNummer) + '\')">Label openen / printen</button>' : '') +
 '</div>' + syncWarning +
 '<button type="button" class="packgo-next-btn" onclick="packGoReset()">Volgende scan &rarr;</button>';
+// Markeert deze scan als afgehandeld: voorkomt dat een volgende scan van
+// dezelfde barcode (standaardmodus) hem nogmaals als "bevestiging" opvat,
+// en dat Single scan een tweede label voor dezelfde order zou aanmaken.
+packGoCurrent.labelCreated = true;
 // Lokaal alvast bijwerken zodat de order direct als "label" getoond wordt
 // als je terug zou schakelen naar de gewone tabs, en zodat printen direct
 // kan zonder een volledige herlaad van /api/orders nodig te hebben.
@@ -1562,7 +1711,7 @@ btn.textContent = 'Label aanmaken';
 
 function packGoReset() {
 packGoCurrent = null;
-document.getElementById('packGoResult').innerHTML = '';
+packGoRenderEmptyState();
 var input = document.getElementById('packGoScanInput');
 if (input) input.focus();
 }
@@ -2509,6 +2658,8 @@ restoreExtraFilters();
 }
 
 initPackGoScanner();
+initPackGoSingleScanToggle();
+packGoRenderEmptyState();
 updatePackGoGateVisibility();
 restorePersistedToolbarSettings();
 loadPrintStations();
