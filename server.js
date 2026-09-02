@@ -239,6 +239,16 @@ function savePackgoMedewerkers(data) {
 // kale TCP-verbinding (poort 9100, standaard voor labelprinters) naar zijn
 // eigen printer-IP doorstuurt. Dit is bewust dezelfde soort opzet als
 // Sendcloud's eigen download-print-app.
+//
+// Sinds 2026-09-02 draait de print-agent ook een klein lokaal statuspunt
+// (http://127.0.0.1:9743, zie startLocalStatusServer() in
+// buildPrintAgentScript) dat alleen vanaf de pc zelf bereikbaar is. Pack &
+// Go in de browser roept dit bij het laden aan om automatisch te herkennen
+// welk inpakstation dit is - geen handmatige "welk station ben ik"-keuze
+// meer nodig (zie findDirectPrintStation()/detectLocalPrintStation() in
+// index.html). Werkt op precies dezelfde manier als Sendcloud's eigen
+// client: eenmalig het scriptje downloaden/starten op die pc, daarna weet
+// de webpagina het vanzelf.
 const PRINT_STATIONS_FILE = DATA_DIR + '/print-stations.json';
 function loadPrintStations() {
   try { return JSON.parse(fs.readFileSync(PRINT_STATIONS_FILE, 'utf8')); } catch(e) { return {}; }
@@ -1018,6 +1028,7 @@ app.get('/api/settings/print-stations/:id/agent-script', (req, res) => {
     baseUrl: baseUrl,
     token: s.token,
     naam: s.naam,
+    stationId: s.id,
     labelIp: s.label.printerIp,
     labelPort: s.label.printerPort,
     pakbonIp: s.pakbon.printerIp,
@@ -1095,12 +1106,16 @@ function buildPrintAgentScript(cfg) {
     '',
     'const BASE_URL = ' + JSON.stringify(cfg.baseUrl) + ';',
     'const TOKEN = ' + JSON.stringify(cfg.token) + ';',
+    'const STATION_ID = ' + JSON.stringify(cfg.stationId) + ';',
+    'const STATION_NAAM = ' + JSON.stringify(cfg.naam) + ';',
+    'const APP_ORIGIN = ' + JSON.stringify(cfg.baseUrl) + ';',
     'const LABEL_IP = ' + JSON.stringify(cfg.labelIp) + ';',
     'const LABEL_PORT = ' + JSON.stringify(cfg.labelPort) + ';',
     'const PAKBON_IP = ' + JSON.stringify(cfg.pakbonIp) + ';',
     'const PAKBON_PORT = ' + JSON.stringify(cfg.pakbonPort) + ';',
     'const POLL_MS = 3000;',
     'const DISCOVER_MS = 60000;',
+    'const LOCAL_STATUS_PORT = 9743;',
     '',
     'function apiRequest(method, path, body) {',
     '  return new Promise(function(resolve, reject) {',
@@ -1194,12 +1209,47 @@ function buildPrintAgentScript(cfg) {
     '  });',
     '}',
     '',
+    '// Klein lokaal statuspunt, alleen bereikbaar vanaf déze pc zelf',
+    '// (127.0.0.1) - hierdoor kan Pack & Go in de browser, zolang die op',
+    '// dezelfde pc open staat, vanzelf herkennen welk inpakstation dit is,',
+    '// zonder dat iemand dat handmatig moet aangeven of onthouden. Zelfde',
+    '// principe als Sendcloud\'s eigen download-print-client. Draait er om',
+    '// wat voor reden dan ook geen print-agent op een pc, dan blijft alles',
+    '// gewoon werken zoals voorheen (browser-printvenster als terugval).',
+    'function startLocalStatusServer() {',
+    '  const server = http.createServer(function(req, res) {',
+    '    res.setHeader("Access-Control-Allow-Origin", APP_ORIGIN);',
+    '    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");',
+    '    res.setHeader("Access-Control-Allow-Headers", "Content-Type");',
+    '    // Chrome/Edge vereisen dit expliciet (Private Network Access) zodra',
+    '    // een https-pagina een lokaal adres (127.0.0.1) aanroept - zonder',
+    '    // deze header wordt de aanvraag stilzwijgend geblokkeerd.',
+    '    res.setHeader("Access-Control-Allow-Private-Network", "true");',
+    '    if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }',
+    '    if (req.method === "GET" && req.url.indexOf("/lj-print-agent-status") === 0) {',
+    '      res.setHeader("Content-Type", "application/json; charset=utf-8");',
+    '      res.writeHead(200);',
+    '      res.end(JSON.stringify({ ok: true, stationId: STATION_ID, naam: STATION_NAAM }));',
+    '      return;',
+    '    }',
+    '    res.writeHead(404);',
+    '    res.end();',
+    '  });',
+    '  server.on("error", function(e) {',
+    '    console.error("[print-agent] kon lokaal statuspunt (poort " + LOCAL_STATUS_PORT + ") niet starten - draait hier per ongeluk al een andere print-agent? Automatische stationherkenning in Pack & Go werkt dan niet mee, maar het printen zelf (via printjobs) blijft gewoon werken. Details: " + e.message);',
+    '  });',
+    '  server.listen(LOCAL_STATUS_PORT, "127.0.0.1", function() {',
+    '    console.log("[print-agent] lokaal statuspunt actief op http://127.0.0.1:" + LOCAL_STATUS_PORT + " (voor automatische stationherkenning door Pack & Go op deze pc)");',
+    '  });',
+    '}',
+    '',
     'console.log("[print-agent] gestart voor station \\"' + cfg.naam + '\\""); ',
     'console.log("[print-agent] label -> " + (LABEL_IP || "(niet ingesteld)") + ":" + LABEL_PORT + ", pakbon -> " + (PAKBON_IP || "(niet ingesteld)") + ":" + PAKBON_PORT);',
     'console.log("[print-agent] elke " + (POLL_MS/1000) + "s printjobs ophalen bij " + BASE_URL);',
     'tick();',
     'discoverPrinters();',
     'setInterval(discoverPrinters, DISCOVER_MS);',
+    'startLocalStatusServer();',
     ''
   ].join('\n');
 }
