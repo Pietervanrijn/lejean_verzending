@@ -121,10 +121,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .packgo-success-box .trunkrs-nr{font-weight:800;color:#2e7d32;font-size:16px}
 .packgo-warning-box{background:#fff3e0;border-radius:10px;padding:14px 18px;margin-top:12px;font-size:13px;color:#e65100}
 .packgo-error-box{background:#ffebee;color:#c62828;border-radius:10px;padding:14px 18px;font-weight:600}
-.packgo-label-link{display:inline-block;margin-top:10px;background:#33401f;color:#fff;padding:9px 20px;border-radius:20px;font-size:13px;font-weight:700;text-decoration:none;border:none;cursor:pointer;font-family:inherit}
-.packgo-label-link:hover{background:#242d15}
-.packgo-next-btn{background:transparent;border:1.5px solid #ccc;color:#555;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;margin-top:14px}
-.packgo-next-btn:hover{border-color:#33401f;color:#33401f}
 /* Pack & Go: "Single scan"-schakelaar + herontwerp van de lege/geladen
    status, naar het voorbeeld van Sendcloud's Pack & Go-scherm (2026-09-02). */
 .packgo-topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
@@ -1671,15 +1667,12 @@ body: JSON.stringify({ orderId: packGoCurrent.order.id, serviceOverride: service
 });
 var data = await res.json();
 if (!res.ok) throw new Error(data.error || 'Onbekende fout');
-var labelHref = data.label ? resolveLabelPdfUrl(data.label.pdf, packGoCurrent.order._ordNummer || packGoCurrent.order.number) : '';
 var syncWarning = data.lightspeedSync ? '' : '<div class="packgo-warning-box">Let op: het is niet gelukt om de tracking automatisch in Lightspeed te zetten (' + escapeHtml(data.lightspeedSyncError || 'onbekende fout') + '). Zet het trackingnummer handmatig in de order.</div>';
 var thisOrdNummer = String(packGoCurrent.order._ordNummer || packGoCurrent.order.number);
 labelResultBox.innerHTML =
 '<div class="packgo-success-box">' +
 'Label aangemaakt &mdash; Trunkrs-nr <span class="trunkrs-nr">' + escapeHtml(data.trunkrsNr) + '</span> (' + (data.service === 'SAME_DAY' ? 'houdbaar' : 'frozen') + ')' +
-(labelHref ? '<br><button type="button" class="packgo-label-link" onclick="printLabelForOrder(\'' + escapeHtml(thisOrdNummer) + '\')">Label openen / printen</button>' : '') +
-'</div>' + syncWarning +
-'<button type="button" class="packgo-next-btn" onclick="packGoReset()">Volgende scan &rarr;</button>';
+'</div>' + syncWarning;
 // Markeert deze scan als afgehandeld: voorkomt dat een volgende scan van
 // dezelfde barcode (standaardmodus) hem nogmaals als "bevestiging" opvat,
 // en dat Single scan een tweede label voor dezelfde order zou aanmaken.
@@ -1701,6 +1694,21 @@ printedBy: null,
 printedAt: null,
 createdAt: data.createdAt
 };
+// Automatisch printen - zelfde route als de knop "Label openen / printen"
+// elders in de app (rechtstreeks naar het inpakstation als dat zo staat
+// ingesteld, anders het vertrouwde PDF-printvenster) - zodat er, net als
+// bij Sendcloud, geen extra handmatige klik nodig is na het scannen.
+if (data.label) { printLabelForOrder(thisOrdNummer); }
+// Keert vanzelf terug naar het scanscherm zodra het label is aangemaakt,
+// na een korte pauze zodat de bevestiging nog even zichtbaar is - in
+// plaats van te blijven staan op deze order tot er handmatig op
+// "Volgende scan" wordt geklikt.
+setTimeout(function() {
+if (packGoCurrent && packGoCurrent.labelCreated &&
+String(packGoCurrent.order._ordNummer || packGoCurrent.order.number) === thisOrdNummer) {
+packGoReset();
+}
+}, 1200);
 } catch(e) {
 labelResultBox.innerHTML = '<div class="packgo-error-box">Label aanmaken mislukt: ' + escapeHtml(e.message) + '</div>';
 } finally {
