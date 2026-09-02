@@ -126,6 +126,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .packgo-topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
 .packgo-topbar-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .packgo-topbar-label{font-size:14px;font-weight:700;color:#33401f}
+.packgo-topbar-divider{width:1px;height:22px;background:#e0e0e0;margin:0 2px}
+.packgo-station-hint{font-size:12.5px;color:#e65100;background:#fff3e0;border-radius:8px;padding:8px 14px;margin:-8px 0 16px}
 .packgo-info-link{background:none;border:none;color:#1565c0;font-size:13px;font-weight:600;cursor:pointer;padding:0}
 .packgo-info-link:hover{text-decoration:underline}
 .pg-toggle{position:relative;display:inline-block;width:42px;height:24px;cursor:pointer;flex-shrink:0}
@@ -407,9 +409,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </label>
 <span class="packgo-topbar-label">Single scan</span>
 <button type="button" class="packgo-info-link" onclick="openPackGoInfoModal()">(Wat is single scan?)</button>
+<span class="packgo-topbar-divider"></span>
+<span class="packgo-topbar-label">Dit station:</span>
+<select id="packGoStationSelect" class="filter-select" style="min-width:170px" onchange="setPackGoStationId(this.value)">
+<option value="">Automatisch</option>
+</select>
 </div>
 <div class="packgo-session-bar">Ingelogd als <b id="packGoSessionNaam"></b><button type="button" class="packgo-switch-link" onclick="packGoLogout()">Wisselen</button></div>
 </div>
+<div id="packGoStationHint" class="packgo-station-hint" style="display:none"></div>
 <div class="packgo-scan-box">
 <label for="packGoScanInput" class="packgo-scan-label">Scan de barcode op de pakbon, of typ het ordernummer</label>
 <div class="packgo-searchbar">
@@ -985,6 +993,26 @@ function buildPakbonHtml(o, products, pageIndex, pageTotal) { pageIndex = pageIn
 // draait, dus dan (en zolang er geen/geen geconfigureerde printer is) blijft
 // het altijd werkende browser-printvenster de terugval.
 function findDirectPrintStation(type) {
+// Is er op deze pc/browser expliciet een inpakstation gekozen (zie de
+// "Dit station"-keuzelijst in Pack & Go)? Dan gebruiken we altijd dát
+// station voor automatisch/silent printen - ongeacht hoeveel stations er
+// in totaal geconfigureerd staan. Zo kunnen meerdere pc's (bv. "mini
+// inpak", "Prodesk inpak") allemaal onafhankelijk automatisch naar hun
+// eigen printer sturen. Heeft het gekozen station geen (bruikbare)
+// printer voor dit documenttype, of staat "eerst bekijken" aan, dan
+// valt het bewust terug op het printvenster (geen giswerk naar een
+// andere printer).
+var chosenId = getPackGoStationId();
+if (chosenId) {
+var chosen = printStationsCache.filter(function(s) { return s.id === chosenId; })[0];
+if (chosen) {
+var chosenCfg = chosen[type];
+if (chosenCfg && chosenCfg.printerIp && !chosenCfg.previewFirst) return chosen;
+return null;
+}
+// Gekozen station bestaat niet meer (bv. verwijderd) - val terug op de
+// oude auto-detect hieronder.
+}
 if (printStationsCache.length !== 1) return null;
 var s = printStationsCache[0];
 var cfg = s[type];
@@ -1895,9 +1923,51 @@ var box = document.getElementById('printStationList');
 fetch('/api/settings/print-stations').then(function(r) { return r.json(); }).then(function(data) {
 printStationsCache = data.stations || [];
 renderPrintStationList();
+renderPackGoStationSelect();
 }).catch(function() {
 if (box) box.innerHTML = '<div class="settings-hint">Kon inpakstations niet laden.</div>';
 });
+}
+
+// --- Pack & Go: "Dit station" - welk inpakstation (fysieke pc) is dit? ----
+// Puur een lokale (localStorage, per pc/browser) voorkeur, net als de
+// Single scan-schakelaar hierboven. Los van elkaar draaiende Pack & Go-pc's
+// (bv. "mini inpak", "Prodesk inpak") kiezen hier elk hun eigen station,
+// zodat findDirectPrintStation() hierboven per pc automatisch/silent naar
+// de juiste printer stuurt i.p.v. alleen te werken zolang er precies 1
+// inpakstation in totaal bestaat. Leeg/"Automatisch" laat het oude gedrag
+// (auto-detect bij precies 1 station) intact - bestaande installaties met
+// maar 1 station hoeven dus niets aan te passen.
+function getPackGoStationId() {
+try { return localStorage.getItem('lj_packgo_station_id') || ''; } catch(e) { return ''; }
+}
+function setPackGoStationId(id) {
+try { localStorage.setItem('lj_packgo_station_id', id || ''); } catch(e) {}
+updatePackGoStationHint();
+}
+function renderPackGoStationSelect() {
+var select = document.getElementById('packGoStationSelect');
+if (!select) return;
+var current = getPackGoStationId();
+select.innerHTML = '<option value="">Automatisch</option>' +
+printStationsCache.map(function(s) { return '<option value="' + escapeHtml(s.id) + '"' + (s.id === current ? ' selected' : '') + '>' + escapeHtml(s.naam) + '</option>'; }).join('');
+// Was het gekozen station verwijderd? Dan toont de keuzelijst nu vanzelf
+// weer "Automatisch" (geen matchende <option>) - de opgeslagen voorkeur
+// zelf laten we met rust, findDirectPrintStation() valt in dat geval toch
+// al terug op auto-detect.
+updatePackGoStationHint();
+}
+function updatePackGoStationHint() {
+var hint = document.getElementById('packGoStationHint');
+if (!hint) return;
+var chosenId = getPackGoStationId();
+if (!chosenId) { hint.style.display = 'none'; return; }
+var chosen = printStationsCache.filter(function(s) { return s.id === chosenId; })[0];
+if (!chosen) { hint.style.display = 'none'; return; }
+var cfg = chosen.label;
+if (cfg && cfg.printerIp && !cfg.previewFirst) { hint.style.display = 'none'; return; }
+hint.textContent = 'Let op: voor "' + chosen.naam + '" staat nog geen labelprinter ingesteld voor automatisch printen (of "eerst bekijken" staat aan) - een label opent dan als PDF i.p.v. direct te printen. Instellen via het tandwiel-icoon rechtsboven.';
+hint.style.display = 'block';
 }
 
 function formatLaatstGezien(iso) {
