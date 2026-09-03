@@ -1143,10 +1143,11 @@ function buildPrintAgentScript(cfg) {
     '  });',
     '}',
     '',
-    '// data: string (ZPL, utf8-tekst) of Buffer (PDF-bytes) - beide gaan als',
-    '// kale bytes over dezelfde raw-socket-verbinding naar de printer, dat is',
-    '// alles wat een netwerkprinter met een TCP/IP-poort (Zebra of anders)',
-    '// nodig heeft.',
+    '// data: altijd een Buffer met de rauwe bytes (ZPL-label of PDF-pakbon,',
+    '// beide komen als base64 binnen en worden vlak hiervoor gedecodeerd) -',
+    '// gaat als kale bytes over dezelfde raw-socket-verbinding naar de printer,',
+    '// dat is alles wat een netwerkprinter met een TCP/IP-poort (Zebra of',
+    '// anders) nodig heeft.',
     'function sendToPrinter(ip, port, data) {',
     '  return new Promise(function(resolve, reject) {',
     '    if (!ip) { reject(new Error("Geen printer-IP ingesteld voor dit documenttype.")); return; }',
@@ -1167,7 +1168,7 @@ function buildPrintAgentScript(cfg) {
     '        if (job.type === "pdf") {',
     '          await sendToPrinter(PAKBON_IP, PAKBON_PORT, Buffer.from(job.content, "base64"));',
     '        } else {',
-    '          await sendToPrinter(LABEL_IP, LABEL_PORT, job.content);',
+    '          await sendToPrinter(LABEL_IP, LABEL_PORT, Buffer.from(job.content, "base64"));',
     '        }',
     '        await apiRequest("POST", "/api/print-agent/jobs/" + job.id + "/ack", { ok: true });',
     '        console.log("[print-agent] " + job.type + " geprint voor order " + job.orderNumber);',
@@ -1275,14 +1276,29 @@ app.post('/api/print-stations/:id/print-label', async (req, res) => {
   // dezelfde reden (auth) stukliep. Daarom hier eerst de echte ZPL-inhoud
   // ophalen bij Trunkrs (met x-api-key) voordat we 'm doorsturen naar de
   // print-agent.
+  //
+  // Sinds 2026-09-03 gaat deze ZPL als base64 (niet als utf8-tekst) de
+  // printjob in: een echt ZPL-label bevat vaak een ingebed vervoerderslogo/
+  // barcode als rauwe binaire bytes, en dat is geen geldige utf8-tekst -
+  // .toString('utf8') beschadigde die bytes dus stilletjes (gevonden doordat
+  // een handmatig verstuurd ASCII-testlabel wel prima printte, maar een
+  // echt Trunkrs-label niet, terwijl de print-agent desondanks "geprint"
+  // meldde - de rauwe TCP-verbinding zelf lukte immers gewoon). De print-
+  // agent decodeert dit vlak vóór het printen terug naar bytes (zie
+  // buildPrintAgentScript hieronder), exact hetzelfde patroon als bij de
+  // pakbon-PDF's.
   if (/^https?:/i.test(zpl)) {
     try {
-      zpl = (await fetchTrunkrsLabelBuffer(zpl)).toString('utf8');
+      zpl = (await fetchTrunkrsLabelBuffer(zpl)).toString('base64');
     } catch (e) {
       const detail = e.response ? JSON.stringify(e.response.data) : e.message;
       console.error('print-label: ZPL ophalen bij Trunkrs mislukt voor order ' + key + ':', detail);
       return res.status(502).json({ error: 'ZPL ophalen bij Trunkrs mislukt: ' + detail });
     }
+  } else {
+    // Zeldzaam pad: Trunkrs leverde deze keer al kant-en-klare ZPL-tekst
+    // i.p.v. een URL - ook dan moet de printjob consistent base64 bevatten.
+    zpl = Buffer.from(zpl, 'utf8').toString('base64');
   }
   const jobId = crypto.randomUUID();
   printJobsStore[jobId] = {
