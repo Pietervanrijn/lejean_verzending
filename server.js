@@ -169,6 +169,44 @@ let orderStatusStore = loadOrderStatus();
 if (migrateOrdPrefixedKeys(printStatusStore, 'print-status')) savePrintStatus(printStatusStore);
 if (migrateOrdPrefixedKeys(orderStatusStore, 'order-status')) saveOrderStatus(orderStatusStore);
 
+// Handmatige correcties op verzendmethode/adres vanuit het "Bewerk order"-
+// potlood-icoon in het Inkomend-tabblad (op verzoek van Pieter, 2026-09-10).
+// Bewust ALLEEN een lokale override in deze app - er wordt nooit iets
+// teruggeschreven naar de echte Lightspeed-order. Gekeyed op het kale
+// ordernummer (zie bareOrderNumberKey), net als de andere stores hierboven.
+const ORDER_OVERRIDES_FILE = DATA_DIR + '/order-overrides.json';
+function loadOrderOverrides() {
+try { return JSON.parse(fs.readFileSync(ORDER_OVERRIDES_FILE, 'utf8')); } catch(e) { return {}; }
+}
+function saveOrderOverrides(data) {
+try { fs.writeFileSync(ORDER_OVERRIDES_FILE, JSON.stringify(data)); } catch(e) { console.error('saveOrderOverrides error:', e.message); }
+}
+let orderOverridesStore = loadOrderOverrides();
+if (migrateOrdPrefixedKeys(orderOverridesStore, 'order-overrides')) saveOrderOverrides(orderOverridesStore);
+
+// Past een eventuele opgeslagen override toe op een rauwe Lightspeed-order,
+// VOORDAT deze verder verwerkt wordt (zie enrichOrders() en de
+// labelaanmaak-route hieronder). Omdat vrijwel alle logica in deze app
+// (verzendmethode-badge, dropdown, en het adres dat daadwerkelijk naar
+// Trunkrs gaat bij het aanmaken van een label) gewoon van deze
+// order.addressShipping*/shipmentTitle-velden leest, hoeft er verder nergens
+// iets aangepast te worden zodra dit vroeg genoeg gebeurt - de correctie
+// stroomt vanzelf door.
+function applyOrderOverride(order) {
+const ov = orderOverridesStore[bareOrderNumberKey(order.number)];
+if (!ov) return order;
+const merged = Object.assign({}, order);
+if (ov.name) merged.addressShippingName = ov.name;
+if (ov.street) merged.addressShippingStreet = ov.street;
+if (ov.number) merged.addressShippingNumber = ov.number;
+if (ov.extension !== undefined) merged.addressShippingExtension = ov.extension;
+if (ov.zipcode) merged.addressShippingZipcode = ov.zipcode;
+if (ov.city) merged.addressShippingCity = ov.city;
+if (ov.countryCode) merged.addressShippingCountry = { code: ov.countryCode, code3: ov.countryCode };
+if (ov.shippingMethod) merged.shipmentTitle = ov.shippingMethod;
+return merged;
+}
+
 const VERZEND_COUNT_FILE = DATA_DIR + '/verzend-count.json';
 function loadVerzendCounts() {
 try { return JSON.parse(fs.readFileSync(VERZEND_COUNT_FILE, 'utf8')); } catch(e) { return {}; }
@@ -468,7 +506,8 @@ async function enrichOrders(orders) {
 // (nu LJ Verzending) dekt inmiddels alle verzendmethodes, dus alle orders
 // met status "klaar voor verzending"/"klaar voor afhalen" worden verrijkt
 // en getoond; de verzendmethode zelf blijft gewoon zichtbaar per order.
-const enriched = await mapWithConcurrency(orders, 5, async (order) => {
+const enriched = await mapWithConcurrency(orders, 5, async (rawOrder) => {
+const order = applyOrderOverride(rawOrder);
 const firstName = order.firstname || '';
 const middleName = order.middlename || '';
 const lastName = order.lastname || '';
@@ -492,7 +531,8 @@ const printStatus = printStatusStore[bareOrderNumberKey(order.number)] || 'geen'
 const orderStatus = orderStatusStore[bareOrderNumberKey(order.number)] || 'inkomend';
 const summary = await fetchOrderProductsSummary(order.id);
 const trunkrsLabel = trunkrsLabelsStore[bareOrderNumberKey(order.number)] || null;
-return { ...order, _klant: klant, _ordNummer: ordNummer, _shippingMethod: shippingMethod, _isPickup: isPickup, _printStatus: printStatus, _orderStatus: orderStatus, itemCount: summary.itemCount, quantityOrdered: summary.quantityOrdered, _trunkrsLabel: trunkrsLabel };
+const hasOverride = !!orderOverridesStore[bareOrderNumberKey(order.number)];
+return { ...order, _klant: klant, _ordNummer: ordNummer, _shippingMethod: shippingMethod, _isPickup: isPickup, _printStatus: printStatus, _orderStatus: orderStatus, itemCount: summary.itemCount, quantityOrdered: summary.quantityOrdered, _trunkrsLabel: trunkrsLabel, _hasOverride: hasOverride };
 });
 return enriched;
 }
@@ -664,6 +704,40 @@ saveOrderStatus(orderStatusStore);
 res.json({ ok: true, orderStatus: orderStatusStore });
 });
 
+// "Bewerk order" (potlood-icoon, Inkomend-tabblad): verzendmethode + adres
+// lokaal corrigeren zonder dit ooit naar Lightspeed terug te schrijven (op
+// verzoek van Pieter, 2026-09-10 - zie ook applyOrderOverride() hierboven).
+app.post('/api/order-overrides/:ordNummer', (req, res) => {
+const key = bareOrderNumberKey(req.params.ordNummer);
+if (!key) return res.status(400).json({ error: 'ordNummer verplicht' });
+const { name, street, number, extension, zipcode, city, countryCode, shippingMethod } = req.body || {};
+const override = {};
+if (name) override.name = String(name).trim();
+if (street) override.street = String(street).trim();
+if (number) override.number = String(number).trim();
+if (extension !== undefined) override.extension = String(extension).trim();
+if (zipcode) override.zipcode = String(zipcode).trim();
+if (city) override.city = String(city).trim();
+if (countryCode) override.countryCode = String(countryCode).trim().toUpperCase();
+if (shippingMethod) override.shippingMethod = String(shippingMethod).trim();
+if (!Object.keys(override).length) return res.status(400).json({ error: 'Geen velden om op te slaan' });
+override.updatedAt = new Date().toISOString();
+orderOverridesStore[key] = override;
+saveOrderOverrides(orderOverridesStore);
+ordersResultCache = { data: null, ts: 0 };
+res.json({ ok: true, override: orderOverridesStore[key] });
+});
+
+// Herstelt een order weer naar de originele Lightspeed-gegevens (verwijdert
+// de lokale override).
+app.delete('/api/order-overrides/:ordNummer', (req, res) => {
+const key = bareOrderNumberKey(req.params.ordNummer);
+delete orderOverridesStore[key];
+saveOrderOverrides(orderOverridesStore);
+ordersResultCache = { data: null, ts: 0 };
+res.json({ ok: true });
+});
+
 app.post('/api/mark-ready-pickup', async (req, res) => {
 const { orderIds } = req.body || {};
 if (!Array.isArray(orderIds) || !orderIds.length) return res.status(400).json({ error: 'orderIds verplicht' });
@@ -743,8 +817,12 @@ const { orderId, serviceOverride } = req.body || {};
 if (!orderId) return res.status(400).json({ error: 'orderId verplicht' });
 try {
 const orderRes = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + orderId + '.json', { headers: apiHeaders() });
-const order = orderRes.data.order;
+let order = orderRes.data.order;
 if (!order) return res.status(404).json({ error: 'Order niet gevonden' });
+// Past een eventuele lokale correctie (potlood-icoon, Inkomend-tabblad) toe
+// zodat een fout adres/verzendmethode ook daadwerkelijk in het bij Trunkrs
+// aangemaakte label terechtkomt - zie applyOrderOverride() hierboven.
+order = applyOrderOverride(order);
 
 // Eigen idempotentie-check, VOORDAT we Trunkrs uberhaupt aanroepen: als we
 // voor deze order al eerder succesvol een label hebben aangemaakt (staat in
