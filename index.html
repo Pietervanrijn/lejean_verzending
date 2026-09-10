@@ -623,18 +623,28 @@ return d;
 // Sorteert de verzendmethodes op urgentie. Eerste keus: de bezorgdatum die
 // in de methode-naam zelf staat (oplopend - eerstvolgende datum bovenaan).
 // Methodes zonder herkenbare datum in de naam (bv. een vervoerdersnaam
-// zonder datum) vallen terug op de oudste nog openstaande order. Methodes
-// zonder openstaande orders komen achteraan (alfabetisch).
+// zonder datum) vallen terug op de oudste nog openstaande order.
+//
+// Toont bewust ALLEEN methodes van orders die nu daadwerkelijk in het
+// Inkomend-tabblad staan (status "inkomend") - dit dropdown-filter hoort
+// namelijk alleen bij dat tabblad. Vroeger werden ook methodes van orders
+// met elke andere status (label/verzonden/geannuleerd/genegeerd) onthouden
+// en onderaan (alfabetisch) blijven staan zodra ze geen openstaande order
+// meer hadden. Omdat de verzendmethode-tekst zelf een concrete datum bevat
+// (bv. "donderdag 10 september (8:00-18:00)") en zulke orders dankzij PR #9
+// voor altijd in de app blijven staan (voor hun eigen tabblad), bleef de
+// lijst zo eindeloos aangroeien met allang afgehandelde methodes van
+// voorafgaande dagen. Zonder openstaande "inkomend"-orders heeft een
+// methode sowieso 0 resultaten als je 'm selecteert, dus die meerwaarde had
+// het niet - alleen ruis.
 function computeSortedMethods(orders) {
 var now = new Date();
 var openMethods = {};
-var seen = {};
 orders.forEach(function(o) {
 var m = o._shippingMethod;
 if (!m) return;
-seen[m] = true;
 var status = o._orderStatus || 'inkomend';
-if (status !== 'inkomend' && status !== 'label') return;
+if (status !== 'inkomend') return;
 if (!openMethods[m]) {
 var parsed = parseDateFromMethod(m, now);
 openMethods[m] = { dateKey: parsed ? parsed.getTime() : null, earliestCreated: Infinity };
@@ -642,15 +652,13 @@ openMethods[m] = { dateKey: parsed ? parsed.getTime() : null, earliestCreated: I
 var t = o.createdAt ? new Date(o.createdAt).getTime() : NaN;
 if (!isNaN(t) && t < openMethods[m].earliestCreated) openMethods[m].earliestCreated = t;
 });
-var withOpenOrders = Object.keys(openMethods).sort(function(a, b) {
+return Object.keys(openMethods).sort(function(a, b) {
 var A = openMethods[a], B = openMethods[b];
 var aHasDate = A.dateKey !== null, bHasDate = B.dateKey !== null;
 if (aHasDate && bHasDate) return A.dateKey - B.dateKey;
 if (aHasDate !== bHasDate) return aHasDate ? -1 : 1;
 return A.earliestCreated - B.earliestCreated;
 });
-var withoutOpenOrders = Object.keys(seen).filter(function(m) { return !(m in openMethods); }).sort();
-return withOpenOrders.concat(withoutOpenOrders);
 }
 
 function populateFilter(methods) {
