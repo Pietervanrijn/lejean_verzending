@@ -204,6 +204,14 @@ if (ov.zipcode) merged.addressShippingZipcode = ov.zipcode;
 if (ov.city) merged.addressShippingCity = ov.city;
 if (ov.countryCode) merged.addressShippingCountry = { code: ov.countryCode, code3: ov.countryCode };
 if (ov.shippingMethod) merged.shipmentTitle = ov.shippingMethod;
+// _carrierOverride/_frozenOverride zijn geen echte Lightspeed-velden - ze
+// worden hier alleen "doorgeprikt" op het (rauwe) orderobject zodat ze,
+// samen met alle andere velden hierboven, automatisch meeliften in
+// enrichOrders()'s `{ ...order, ... }`-spread verderop, zonder dat
+// enrichOrders() zelf iets van deze override hoeft te weten. _frozenOverride
+// wordt daarnaast ook direct in de labelaanmaak-route hieronder gebruikt.
+if (ov.carrier) merged._carrierOverride = ov.carrier;
+if (typeof ov.frozen === 'boolean') merged._frozenOverride = ov.frozen;
 return merged;
 }
 
@@ -710,7 +718,7 @@ res.json({ ok: true, orderStatus: orderStatusStore });
 app.post('/api/order-overrides/:ordNummer', (req, res) => {
 const key = bareOrderNumberKey(req.params.ordNummer);
 if (!key) return res.status(400).json({ error: 'ordNummer verplicht' });
-const { name, street, number, extension, zipcode, city, countryCode, shippingMethod } = req.body || {};
+const { name, street, number, extension, zipcode, city, countryCode, shippingMethod, carrier, frozen } = req.body || {};
 const override = {};
 if (name) override.name = String(name).trim();
 if (street) override.street = String(street).trim();
@@ -720,6 +728,16 @@ if (zipcode) override.zipcode = String(zipcode).trim();
 if (city) override.city = String(city).trim();
 if (countryCode) override.countryCode = String(countryCode).trim().toUpperCase();
 if (shippingMethod) override.shippingMethod = String(shippingMethod).trim();
+// "Automatisch" (lege waarde) slaat bewust geen verzender op - dat is geen
+// foutieve invoer maar de expliciete keuze om terug te vallen op de
+// bestaande tekst-gebaseerde detectie (zie resolveCarrierKey() in
+// index.html). ALLOWED_CARRIERS = alleen vervoerders die de app al kent.
+const ALLOWED_CARRIERS = ['trunkrs', 'postnl', 'chillbill'];
+if (carrier && ALLOWED_CARRIERS.includes(String(carrier).toLowerCase())) override.carrier = String(carrier).toLowerCase();
+// "frozen" komt van een vinkje (altijd true/false, geen "geen keuze"), dus
+// hier op type checken i.p.v. op truthy-heid - anders zou "niet frozen"
+// (false) ten onrechte als "niet meegegeven" behandeld worden.
+if (typeof frozen === 'boolean') override.frozen = frozen;
 if (!Object.keys(override).length) return res.status(400).json({ error: 'Geen velden om op te slaan' });
 override.updatedAt = new Date().toISOString();
 orderOverridesStore[key] = override;
@@ -858,7 +876,15 @@ const productsRes = await axios.get('https://api.webshopapp.com/' + SHOP + '/ord
 const products = productsRes.data.orderProducts || productsRes.data.products || [];
 
 const autoService = bepaalTrunkrsService(products);
-const service = (serviceOverride === 'SAME_DAY' || serviceOverride === 'SAME_DAY_FROZEN_FOOD') ? serviceOverride : autoService;
+// Prioriteit: (1) expliciete serviceOverride die met DEZE aanvraag is
+// meegestuurd (bv. het potloodje in Pack & Go, per-scan), (2) een via
+// "Bewerk order" opgeslagen "Frozen zending"-vinkje (order._frozenOverride,
+// al toegepast door applyOrderOverride() hierboven), (3) de automatische
+// inschatting op basis van artikelcodes.
+const persistedService = typeof order._frozenOverride === 'boolean'
+? (order._frozenOverride ? 'SAME_DAY_FROZEN_FOOD' : 'SAME_DAY')
+: null;
+const service = (serviceOverride === 'SAME_DAY' || serviceOverride === 'SAME_DAY_FROZEN_FOOD') ? serviceOverride : (persistedService || autoService);
 const payload = buildTrunkrsShipmentPayload(order, products, service);
 
 const trunkrsRes = await axios.post(TRUNKRS_BASE_URL + '/shipments', payload, { headers: trunkrsHeaders() });

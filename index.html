@@ -215,6 +215,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .bewerk-order-form label input:focus,.bewerk-order-form label select:focus{border-color:#f0821e}
 .bewerk-order-row{display:flex;gap:12px}
 .bewerk-order-row label{flex:1;min-width:0}
+.bewerk-order-form label.bewerk-order-checkbox{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;color:#333;text-transform:none;letter-spacing:normal;margin-top:-4px;margin-bottom:14px;cursor:pointer}
+.bewerk-order-form label.bewerk-order-checkbox input{display:inline-block;width:auto;margin:0;cursor:pointer}
 .modal-status-step{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
 .modal-status-dot{width:10px;height:10px;border-radius:50%;background:#2e7d32;margin-top:5px;flex-shrink:0}
 .modal-status-text{font-size:13px;color:#333}
@@ -472,7 +474,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </div>
 <p class="settings-hint" style="margin-top:-10px">Wijzigingen gelden alleen in deze app &ndash; de order in Lightspeed zelf blijft ongewijzigd.</p>
 <div class="bewerk-order-form">
-<label>Verzendmethode<input type="text" id="bewerkVerzendmethode" autocomplete="off"></label>
+<div class="bewerk-order-row">
+<label style="flex:2">Verzendmethode<input type="text" id="bewerkVerzendmethode" autocomplete="off"></label>
+<label style="flex:1">Verzender<select id="bewerkVerzender">
+<option value="">Automatisch</option>
+<option value="trunkrs">Trunkrs</option>
+<option value="postnl">PostNL</option>
+<option value="chillbill">Chill-Bill</option>
+</select></label>
+</div>
+<label class="bewerk-order-checkbox"><input type="checkbox" id="bewerkFrozen"> Frozen zending (bevroren vervoer)</label>
 <label>Naam<input type="text" id="bewerkNaam" autocomplete="off"></label>
 <div class="bewerk-order-row">
 <label style="flex:2">Straat<input type="text" id="bewerkStraat" autocomplete="off"></label>
@@ -941,13 +952,25 @@ if (isTrunkrsMethod(shipMethod)) return 'trunkrs';
 return 'onbekend';
 }
 
+// Centrale plek om de vervoerder van een order te bepalen: een handmatige
+// correctie via "Bewerk order" (_carrierOverride, PR #39) gaat altijd voor,
+// anders geldt afhalen/de tekst-gebaseerde detectie hierboven zoals voorheen.
+// Alle plekken die de vervoerder tonen (badge, pakbon, "Vervoerder"-filter)
+// gebruiken deze ene functie, zodat een override overal automatisch meetelt.
+function resolveCarrierKey(order) {
+if (order && order._carrierOverride) return order._carrierOverride;
+var isPickup = !!(order && (order.shipmentIsPickup || order._isPickup));
+if (isPickup) return 'afhalen';
+return detectCarrierKey(order && order._shippingMethod);
+}
+
 // productLabelOverride: als er al een preciezere naam bekend is (bv. het
 // daadwerkelijk geboekte Trunkrs-product "Trunkrs Same Day Delivery" i.p.v.
 // alleen de ruwe verzendmethode-tekst), gebruik die als subtekst.
 function shipMethodBadgeHtml(order, productLabelOverride) {
 var isPickup = !!(order && (order.shipmentIsPickup || order._isPickup));
 var rawMethod = (order && order._shippingMethod) || (isPickup ? 'Afhalen bij LeJean in Leidschendam' : 'Onbekend');
-var key = isPickup ? 'afhalen' : detectCarrierKey(rawMethod);
+var key = resolveCarrierKey(order);
 var info = CARRIER_INFO[key] || CARRIER_INFO.onbekend;
 var subLabel = productLabelOverride || rawMethod;
 var chipHtml = info.logo
@@ -1006,7 +1029,7 @@ var adresSafe = escapeHtml([[postcode,city].filter(Boolean).join(', '), countryC
 var printBadge = '<button type="button" class="geprint-badge geprint-' + printStatus + '" onclick="toggleBeide(\'' + ordNummerSafe + '\',\'' + printStatus + '\')" title="Klik om te wisselen tussen Enkel pakbon en Beide geprint">' + printLabel + '</button>';
 
 var statusLabel = currentTab === 'geannuleerd' ? 'Geannuleerd' : (currentTab === 'verzonden' ? 'Verzonden' : 'Wacht op verzending');
-var bewerkKolomHtml = showBewerkKolom ? '<td><button type="button" class="' + (o._hasOverride ? 'bewerk-order-btn bewerk-order-btn-active' : 'bewerk-order-btn') + '" onclick="openBewerkOrderModal(\'' + ordNummerSafe + '\')" title="' + (o._hasOverride ? 'Aangepast (verzendmethode/adres) - klik om te bewerken' : 'Order bewerken (verzendmethode/adres)') + '">&#9998;</button></td>' : '';
+var bewerkKolomHtml = showBewerkKolom ? '<td><button type="button" class="' + (o._hasOverride ? 'bewerk-order-btn bewerk-order-btn-active' : 'bewerk-order-btn') + '" onclick="openBewerkOrderModal(\'' + ordNummerSafe + '\')" title="' + (o._hasOverride ? 'Aangepast - klik om te bewerken' : 'Order bewerken (verzendmethode/verzender/adres/frozen)') + '">&#9998;</button></td>' : '';
 return '<tr><td><input type="checkbox" class="order-checkbox" data-id="' + idSafe + '" data-num="' + ordNummerSafe + '" onchange="updateSelection()"></td><td><div class="shop-status-icon">&#10003;</div></td><td><span class="status-text">' + escapeHtml(statusLabel) + '</span></td><td><a class="order-num-link" href="#">' + ordNummerSafe + '</a><div class="order-date">' + dateSafe + '</div></td><td><div class="' + (hasShipWarning ? "ship-method-wrap ship-wadden-warning" : "ship-method-wrap") + '">' + shipMethodBadgeHtml(o) + shipWarningBadgeHtml + '</div></td><td><div class="inhoud-items">' + itemLabel + '</div>' + (qtyText ? '<div class="inhoud-detail">' + qtyText + '</div>' : '') + (valText ? '<div class="inhoud-detail">' + valText + '</div>' : '') + '</td><td><div class="klant-naam">' + (flag ? flag : '') + klantSafe + '</div>' + (email ? '<div class="klant-email">' + emailSafe + '</div>' : '') + ((postcode||city||countryCode) ? '<div class="klant-adres">' + adresSafe + '</div>' : '') + '</td><td>' + printBadge + '</td>' + bewerkKolomHtml + '</tr>';
 }).join('');
 c.innerHTML = '<div class="orders-table-wrap"><table class="orders-table"><thead><tr><th><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onchange="toggleSelectAll(this)" title="Alles selecteren"></th><th>SHOP STATUS</th><th>STATUS</th><th>ORDER</th><th>VERZENDMETHODE</th><th>INHOUD VAN DE BESTELLING</th><th>KLANT</th><th>GEPRINT</th>' + (showBewerkKolom ? '<th></th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
@@ -1018,12 +1041,13 @@ c.innerHTML = '<div class="orders-table-wrap"><table class="orders-table"><thead
 // orders EN bij het daadwerkelijk aanmaken van een Trunkrs-label toepast.
 var bewerkOrderCurrentOrdNummer = null;
 
-function openBewerkOrderModal(ordNummer) {
+async function openBewerkOrderModal(ordNummer) {
 var order = allOrders.find(function(o) { return o._ordNummer === ordNummer || String(o.number) === ordNummer; });
 if (!order) return;
 bewerkOrderCurrentOrdNummer = order._ordNummer || ordNummer;
 document.getElementById('bewerkOrderNummerLabel').textContent = bewerkOrderCurrentOrdNummer;
 document.getElementById('bewerkVerzendmethode').value = order._shippingMethod || '';
+document.getElementById('bewerkVerzender').value = order._carrierOverride || '';
 document.getElementById('bewerkNaam').value = order.addressShippingName || [order.firstname, order.middlename, order.lastname].filter(Boolean).join(' ') || '';
 document.getElementById('bewerkStraat').value = order.addressShippingStreet || '';
 document.getElementById('bewerkHuisnummer').value = order.addressShippingNumber || '';
@@ -1034,6 +1058,25 @@ var landCode = ((order.addressShippingCountry && (order.addressShippingCountry.c
 document.getElementById('bewerkLand').value = (landCode === 'BE') ? 'BE' : 'NL';
 document.getElementById('bewerkOrderError').textContent = '';
 document.getElementById('bewerkOrderResetBtn').style.display = order._hasOverride ? '' : 'none';
+// "Frozen zending"-vinkje: is er al een eerder opgeslagen keuze
+// (_frozenOverride, meegegeven door de server zodra er een override
+// bestaat), gebruik die. Anders is er nog geen bewuste keuze gemaakt en
+// tonen we de automatische inschatting (zelfde logica/herkomst als het
+// bestaande potloodje in Pack & Go) - hiervoor moeten de producten van
+// deze order eenmalig opgehaald worden (de orderlijst zelf bevat alleen
+// een itemcount, geen artikelcodes).
+var frozenCb = document.getElementById('bewerkFrozen');
+if (typeof order._frozenOverride === 'boolean') {
+frozenCb.checked = order._frozenOverride;
+} else {
+frozenCb.checked = false;
+try {
+var prodRes = await fetch('/api/orders/' + order.id + '/products');
+var prodData = await prodRes.json();
+var products = prodData.products || [];
+frozenCb.checked = bepaalTrunkrsServiceClient(products) === 'SAME_DAY_FROZEN_FOOD';
+} catch(e) { /* kon niet ophalen - laat de veilige default (aangevinkt: niet-frozen aannemen kan tot een verkeerd label leiden, dus val terug op frozen) */ frozenCb.checked = true; }
+}
 document.getElementById('bewerkOrderModal').classList.add('open');
 }
 
@@ -1048,6 +1091,8 @@ var errorBox = document.getElementById('bewerkOrderError');
 errorBox.textContent = '';
 var payload = {
 shippingMethod: document.getElementById('bewerkVerzendmethode').value.trim(),
+carrier: document.getElementById('bewerkVerzender').value,
+frozen: document.getElementById('bewerkFrozen').checked,
 name: document.getElementById('bewerkNaam').value.trim(),
 street: document.getElementById('bewerkStraat').value.trim(),
 number: document.getElementById('bewerkHuisnummer').value.trim(),
@@ -1100,7 +1145,7 @@ function escapeHtml(str) { return String(str).replace(/[&<>"']/g, function(c) { 
 function pakbonCarrierBadgeHtml(o) {
 var isPickup = !!(o && (o.shipmentIsPickup || o._isPickup));
 var rawMethod = (o && o._shippingMethod) || (isPickup ? 'Afhalen bij LeJean in Leidschendam' : 'Onbekend');
-var key = isPickup ? 'afhalen' : detectCarrierKey(rawMethod);
+var key = resolveCarrierKey(o);
 var info = CARRIER_INFO[key] || CARRIER_INFO.onbekend;
 var logoBw = CARRIER_LOGOS_BW[key];
 if (logoBw) return '<div class="pakbon-carrier"><img src="' + logoBw + '" alt="' + escapeHtml(info.naam) + '" class="pakbon-carrier-logo pakbon-carrier-logo-' + key + '"></div>';
@@ -1368,8 +1413,7 @@ return (o.addressShippingCountry && (o.addressShippingCountry.title || o.address
 vervoerder: {
 label: 'Vervoerder',
 getValue: function(o) {
-var isPickup = !!(o.shipmentIsPickup || o._isPickup);
-var key = isPickup ? 'afhalen' : detectCarrierKey(o._shippingMethod);
+var key = resolveCarrierKey(o);
 var info = CARRIER_INFO[key] || CARRIER_INFO.onbekend;
 return info.naam;
 }
