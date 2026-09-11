@@ -1397,9 +1397,34 @@ app.post('/api/print-stations/:id/print-label', async (req, res) => {
   // agent decodeert dit vlak vóór het printen terug naar bytes (zie
   // buildPrintAgentScript hieronder), exact hetzelfde patroon als bij de
   // pakbon-PDF's.
+  //
+  // Update 11-09-2026: die eerdere fix voegde hier ONVOORWAARDELIJK een
+  // base64-laag toe bovenop wat fetchTrunkrsLabelBuffer teruggeeft. Bij
+  // uitzoeken van een order (80916) waarvoor de print-agent "geprint"
+  // meldde maar er niets uit de printer kwam, bleek dat Trunkrs de ZPL op
+  // deze url in de praktijk zelf al als base64-tekst aanlevert (in
+  // tegenstelling tot de PDF-variant, die wel kale binaire bytes teruggeeft)
+  // - bevestigd doordat een handmatige test die de inhoud van
+  // /api/trunkrs/label-file/:orderNumber?format=zpl één keer base64-
+  // decodeerde wél een goed label printte. Het hier nogmaals coderen met
+  // .toString('base64') maakte er dus base64-van-base64 van: de print-agent
+  // decodeerde vervolgens maar één laag terug en stuurde de leesbare
+  // base64-tekst zelf (geen geldige ZPL, begint niet met ^XA) naar de
+  // printer - die negeert dat stilletjes, vandaar "geprint" zonder dat er
+  // iets uitkwam. Base64-tekst bestaat alleen uit A-Za-z0-9+/= (en evt.
+  // newlines); komt de opgehaalde inhoud daarmee overeen, dan is 'm al
+  // base64 en sturen we 'm ongewijzigd door. Bevat het iets anders (kale
+  // ZPL-tekst of rauwe binaire bytes, zoals Trunkrs dat voor andere
+  // documenttypen of in de toekomst misschien ook voor ZPL gaat doen), dan
+  // coderen we 'm hier alsnog naar base64 - dat dekt beide gevallen.
+  function toJobBase64(buf) {
+    const asText = buf.toString('utf8').trim();
+    const looksAlreadyBase64 = asText.length > 0 && /^[A-Za-z0-9+/=\s]+$/.test(asText);
+    return looksAlreadyBase64 ? asText.replace(/\s+/g, '') : buf.toString('base64');
+  }
   if (/^https?:/i.test(zpl)) {
     try {
-      zpl = (await fetchTrunkrsLabelBuffer(zpl)).toString('base64');
+      zpl = toJobBase64(await fetchTrunkrsLabelBuffer(zpl));
     } catch (e) {
       const detail = e.response ? JSON.stringify(e.response.data) : e.message;
       console.error('print-label: ZPL ophalen bij Trunkrs mislukt voor order ' + key + ':', detail);
@@ -1408,7 +1433,7 @@ app.post('/api/print-stations/:id/print-label', async (req, res) => {
   } else {
     // Zeldzaam pad: Trunkrs leverde deze keer al kant-en-klare ZPL-tekst
     // i.p.v. een URL - ook dan moet de printjob consistent base64 bevatten.
-    zpl = Buffer.from(zpl, 'utf8').toString('base64');
+    zpl = toJobBase64(Buffer.from(zpl, 'utf8'));
   }
   const jobId = crypto.randomUUID();
   printJobsStore[jobId] = {
