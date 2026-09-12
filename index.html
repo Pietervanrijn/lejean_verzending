@@ -533,8 +533,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div id="printStationList"></div>
 <div class="medewerker-add-row">
 <input type="text" id="nieuwStationNaam" placeholder="Naam (bv. Inpakstation 1)" autocomplete="off">
-<input type="text" id="nieuwStationIp" placeholder="Printer IP-adres (bv. 192.168.1.50)" autocomplete="off">
-<input type="text" id="nieuwStationPoort" placeholder="Poort (standaard 9100)" inputmode="numeric" autocomplete="off">
+<input type="text" id="nieuwStationPrinterNaam" placeholder="Windows-printernaam voor labels (bv. Intermec PM43)" autocomplete="off">
 </div>
 <div class="medewerker-add-actions">
 <button type="button" class="modal-btn modal-btn-primary" onclick="addPrintStation()">Station toevoegen</button>
@@ -1175,7 +1174,7 @@ if (localDetectedStationId) {
 var detected = printStationsCache.filter(function(s) { return s.id === localDetectedStationId; })[0];
 if (detected) {
 var detectedCfg = detected[type];
-if (detectedCfg && detectedCfg.printerIp && !detectedCfg.previewFirst) return detected;
+if (detectedCfg && detectedCfg.printerNaam && !detectedCfg.previewFirst) return detected;
 return null;
 }
 // Gedetecteerd station bestaat niet meer (bv. verwijderd) - val terug op
@@ -1184,7 +1183,7 @@ return null;
 if (printStationsCache.length !== 1) return null;
 var s = printStationsCache[0];
 var cfg = s[type];
-if (!cfg || !cfg.printerIp || cfg.previewFirst) return null;
+if (!cfg || !cfg.printerNaam || cfg.previewFirst) return null;
 return s;
 }
 
@@ -2137,7 +2136,7 @@ if (!station) { badge.style.display = 'none'; hint.style.display = 'none'; retur
 badge.textContent = 'Dit station: ' + station.naam;
 badge.style.display = 'inline-block';
 var cfg = station.label;
-if (cfg && cfg.printerIp && !cfg.previewFirst) { hint.style.display = 'none'; return; }
+if (cfg && cfg.printerNaam && !cfg.previewFirst) { hint.style.display = 'none'; return; }
 hint.textContent = 'Let op: voor "' + station.naam + '" staat nog geen labelprinter ingesteld voor automatisch printen (of "eerst bekijken" staat aan) - een label opent dan als PDF i.p.v. direct te printen. Instellen via het tandwiel-icoon rechtsboven.';
 hint.style.display = 'block';
 }
@@ -2153,22 +2152,27 @@ if (uren < 24) return uren + ' uur geleden';
 return Math.round(uren / 24) + ' dagen geleden';
 }
 
-// Bouwt 1 documenttype-blokje (Label of Pakbon) binnen een stationkaart:
-// een keuzelijst met door de print-agent gedetecteerde netwerkprinters (die
-// vult bij keuze automatisch het IP-veld hieronder in - "eenvoudig te
-// wisselen", zoals gevraagd) plus een handmatig IP/poort-veld als terugval
-// voor printers die de print-agent nog niet gezien heeft, een formaat-
-// keuzelijst en de "eerst bekijken voordat er geprint wordt"-schakelaar
-// (zie Sendcloud's Afdrukopties-scherm).
+// Bouwt 1 documenttype-blokje (Label of Pakbon) binnen een stationkaart: een
+// keuzelijst met de door de print-agent gedetecteerde Windows-printers (vult
+// bij keuze automatisch het naam-veld hieronder in) plus een handmatig
+// naam-veld als terugval voor printers die de print-agent nog niet gezien
+// heeft, een formaat-keuzelijst en de "eerst bekijken voordat er geprint
+// wordt"-schakelaar (zie Sendcloud's Afdrukopties-scherm).
+//
+// Sinds 12-09-2026 wordt hier de exacte Windows-printernaam ingevuld i.p.v.
+// een IP-adres+poort: er wordt altijd via de Windows-printerdriver geprint
+// (zie server.js/buildPrintAgentScript), dat werkt voor elk printermerk op
+// dezelfde manier, i.p.v. per merk een eigen oplossing (Zebra vs. Intermec
+// bijvoorbeeld) nodig te hebben.
 function buildPrintDocTypeBlock(s, type, titel, formaatOpties) {
-var cfg = s[type] || { printerIp: '', printerPort: 9100, formaat: formaatOpties[0], previewFirst: true };
-var ipFieldId = 'psIp_' + type + '_' + s.id;
+var cfg = s[type] || { printerNaam: '', formaat: formaatOpties[0], previewFirst: true };
+var naamFieldId = 'psNaam_' + type + '_' + s.id;
 var detected = (s.detectedPrinters || []);
 var detectSelect = '';
 if (detected.length) {
-detectSelect = '<select onchange="if(this.value) document.getElementById(\'' + ipFieldId + '\').value = this.value;">' +
+detectSelect = '<select onchange="if(this.value) document.getElementById(\'' + naamFieldId + '\').value = this.value;">' +
 '<option value="">-- gedetecteerde printer kiezen --</option>' +
-detected.map(function(p) { return '<option value="' + escapeHtml(p.ip) + '"' + (p.ip === cfg.printerIp ? ' selected' : '') + '>' + escapeHtml(p.name) + ' (' + escapeHtml(p.ip) + ')</option>'; }).join('') +
+detected.map(function(p) { return '<option value="' + escapeHtml(p.name) + '"' + (p.name === cfg.printerNaam ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>'; }).join('') +
 '</select>';
 }
 var formaatSelect = '<select id="psFormaat_' + type + '_' + s.id + '">' +
@@ -2178,8 +2182,7 @@ return '<div class="print-station-doctype">' +
 '<strong>' + titel + '</strong>' +
 (detectSelect ? '<div>' + detectSelect + '</div>' : '') +
 '<div class="medewerker-add-row">' +
-'<input type="text" id="' + ipFieldId + '" placeholder="Printer IP-adres" value="' + escapeHtml(cfg.printerIp) + '" autocomplete="off">' +
-'<input type="text" id="psPoort_' + type + '_' + s.id + '" placeholder="Poort" value="' + escapeHtml(cfg.printerPort) + '" inputmode="numeric" autocomplete="off" style="max-width:90px">' +
+'<input type="text" id="' + naamFieldId + '" placeholder="Windows-printernaam (bv. Intermec PM43)" value="' + escapeHtml(cfg.printerNaam) + '" autocomplete="off" style="min-width:220px">' +
 formaatSelect +
 '</div>' +
 '<label style="display:flex;align-items:center;gap:6px;font-weight:normal">' +
@@ -2197,7 +2200,7 @@ box.innerHTML = printStationsCache.map(function(s) {
 var aantalGedetecteerd = (s.detectedPrinters || []).length;
 return '<div class="print-station-row" style="flex-direction:column;align-items:stretch;gap:10px">' +
 '<div class="print-station-info"><span class="medewerker-naam" style="white-space:normal">' + escapeHtml(s.naam) + '</span>' +
-'<span class="settings-hint">' + escapeHtml(formatLaatstGezien(s.lastSeenAt)) + (aantalGedetecteerd ? (' &middot; ' + aantalGedetecteerd + ' netwerkprinter(s) gedetecteerd') : '') + '</span></div>' +
+'<span class="settings-hint">' + escapeHtml(formatLaatstGezien(s.lastSeenAt)) + (aantalGedetecteerd ? (' &middot; ' + aantalGedetecteerd + ' printer(s) gedetecteerd') : '') + '</span></div>' +
 buildPrintDocTypeBlock(s, 'label', 'Label', ['A6', 'A4']) +
 buildPrintDocTypeBlock(s, 'pakbon', 'Pakbon', ['A4', 'A5']) +
 '<div class="print-station-actions">' +
@@ -2211,8 +2214,7 @@ buildPrintDocTypeBlock(s, 'pakbon', 'Pakbon', ['A4', 'A5']) +
 
 function readPrintDocTypeFields(id, type) {
 return {
-printerIp: (document.getElementById('psIp_' + type + '_' + id) || {}).value || '',
-printerPort: (document.getElementById('psPoort_' + type + '_' + id) || {}).value || 9100,
+printerNaam: (document.getElementById('psNaam_' + type + '_' + id) || {}).value || '',
 formaat: (document.getElementById('psFormaat_' + type + '_' + id) || {}).value,
 previewFirst: !!((document.getElementById('psPreview_' + type + '_' + id) || {}).checked)
 };
@@ -2235,18 +2237,16 @@ loadPrintStations();
 
 function addPrintStation() {
 var naam = document.getElementById('nieuwStationNaam').value.trim();
-var ip = document.getElementById('nieuwStationIp').value.trim();
-var poortRaw = document.getElementById('nieuwStationPoort').value.trim();
+var printerNaam = document.getElementById('nieuwStationPrinterNaam').value.trim();
 var errBox = document.getElementById('printStationError');
 errBox.textContent = '';
-if (!naam || !ip) { errBox.textContent = 'Naam en printer-IP zijn verplicht.'; return; }
-fetch('/api/settings/print-stations', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ naam: naam, printerIp: ip, printerPort: poortRaw || 9100 }) })
+if (!naam || !printerNaam) { errBox.textContent = 'Naam en Windows-printernaam (voor labels) zijn verplicht.'; return; }
+fetch('/api/settings/print-stations', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ naam: naam, printerNaam: printerNaam }) })
 .then(function(r) { return r.json().then(function(data) { return { status: r.status, data: data }; }); })
 .then(function(res) {
 if (res.status !== 200) { errBox.textContent = (res.data && res.data.error) || 'Opslaan mislukt.'; return; }
 document.getElementById('nieuwStationNaam').value = '';
-document.getElementById('nieuwStationIp').value = '';
-document.getElementById('nieuwStationPoort').value = '';
+document.getElementById('nieuwStationPrinterNaam').value = '';
 loadPrintStations();
 })
 .catch(function() { errBox.textContent = 'Opslaan mislukt (netwerkfout).'; });
