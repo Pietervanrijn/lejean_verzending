@@ -311,26 +311,46 @@ let printStationsStore = loadPrintStations();
 // schakelaar (zie Sendcloud's Afdrukopties-scherm). Deze migratie verplaatst
 // bestaande stations naar de nieuwe geneste vorm zonder de al werkende
 // labelprinter-configuratie te verliezen.
+// Sinds 12-09-2026 slaan we per documenttype geen printerIp/printerPort meer
+// op maar een Windows-printernaam (zie parsePrinterConfig hierboven - alles
+// gaat nu via de Windows-driver i.p.v. een kale TCP-verbinding, zodat het
+// werkt ongeacht printermerk). Bestaande stations van vóór die datum hebben
+// nog het oude ip/poort-schema; die kunnen we niet automatisch omzetten naar
+// een printernaam (een IP-adres vertelt ons niet welke Windows-printer daar
+// destijds bij hoorde), dus die velden worden hier leeggemaakt - Pieter kiest
+// dan eenmalig opnieuw de juiste Windows-printer via de instellingen
+// (dezelfde gedetecteerde-printers-keuzelijst als voorheen, nu met namen
+// i.p.v. IP-adressen).
+function migrateDocTypeToPrinterNaam(cfg, fallbackFormaat) {
+  if (!cfg || cfg.printerNaam !== undefined) return cfg;
+  return {
+    printerNaam: '',
+    formaat: cfg.formaat || fallbackFormaat,
+    previewFirst: cfg.previewFirst !== false
+  };
+}
+
 function migratePrintStationsShape(store) {
   let changed = false;
   Object.keys(store).forEach(function(id) {
     const s = store[id];
     if (!s.label) {
-      s.label = {
-        printerIp: s.printerIp || '',
-        printerPort: s.printerPort || 9100,
-        formaat: 'A6',
-        previewFirst: true
-      };
-      delete s.printerIp;
-      delete s.printerPort;
+      s.label = { printerNaam: '', formaat: 'A6', previewFirst: true };
       changed = true;
+    } else {
+      const migrated = migrateDocTypeToPrinterNaam(s.label, 'A6');
+      if (migrated !== s.label) { s.label = migrated; changed = true; }
     }
     if (!s.pakbon) {
-      s.pakbon = { printerIp: '', printerPort: 9100, formaat: 'A4', previewFirst: true };
+      s.pakbon = { printerNaam: '', formaat: 'A4', previewFirst: true };
       changed = true;
+    } else {
+      const migrated = migrateDocTypeToPrinterNaam(s.pakbon, 'A4');
+      if (migrated !== s.pakbon) { s.pakbon = migrated; changed = true; }
     }
-    if (!s.detectedPrinters) {
+    if (!s.detectedPrinters || (s.detectedPrinters[0] && s.detectedPrinters[0].ip !== undefined)) {
+      // Ook oude gedetecteerde-printerlijsten (met .ip) opruimen - die tonen
+      // anders nog IP-adressen in een keuzelijst die nu namen verwacht.
       s.detectedPrinters = [];
       changed = true;
     }
@@ -1052,25 +1072,36 @@ app.get('/api/settings/print-stations', (req, res) => {
   res.json({ stations: stations });
 });
 
+// Sinds 12-09-2026 wordt hier bewust geen printer-IP/poort meer opgeslagen.
+// We stuurden voorheen kale printertaal (ZPL) rechtstreeks over een TCP-
+// socket naar het IP van de printer - dat werkt alleen als de printer die
+// exacte taal ook spreekt (Zebra: ZPL). Op mini inpak bleek de Intermec PM43
+// een andere printertaal (Fingerprint/IPL) te spreken: de bytes kwamen aan,
+// de verbinding sloot netjes, maar er kwam niets uit - weer een ander,
+// printermerk-specifiek probleem boven op de eerdere ZPL/base64-bugs. Op
+// verzoek van Pieter (die hier terecht op wees dat Sendcloud ook geen
+// per-merk-uitzonderingen heeft) printen we nu altijd op dezelfde, merk-
+// onafhankelijke manier: het document als PDF stil afdrukken via de
+// Windows-printerdriver (met SumatraPDF, zie buildPrintAgentScript) - die
+// driver (Zebra's eigen driver, Intermec's eigen driver, of welk merk dan
+// ook) zet een gewone PDF zelf om naar wat die printer nodig heeft. Daarom
+// volstaat hier de Windows-printernaam (zoals Get-Printer 'm kent) i.p.v.
+// IP+poort.
 function parsePrinterConfig(input, fallbackFormaat) {
   const c = input || {};
-  const ip = c.printerIp != null ? String(c.printerIp).trim() : '';
-  const poort = c.printerPort ? parseInt(c.printerPort, 10) : 9100;
+  const printerNaam = c.printerNaam != null ? String(c.printerNaam).trim() : '';
   return {
-    printerIp: ip,
-    printerPort: Number.isInteger(poort) && poort >= 1 && poort <= 65535 ? poort : 9100,
+    printerNaam: printerNaam,
     formaat: c.formaat ? String(c.formaat) : fallbackFormaat,
     previewFirst: c.previewFirst !== false
   };
 }
 
 app.post('/api/settings/print-stations', (req, res) => {
-  const { naam, printerIp, printerPort } = req.body || {};
+  const { naam, printerNaam } = req.body || {};
   const naamTrimmed = naam != null ? String(naam).trim() : '';
-  const ipTrimmed = printerIp != null ? String(printerIp).trim() : '';
-  const poort = printerPort ? parseInt(printerPort, 10) : 9100;
-  if (!naamTrimmed || !ipTrimmed) return res.status(400).json({ error: 'Naam en printer-IP (voor labels) zijn verplicht.' });
-  if (!Number.isInteger(poort) || poort < 1 || poort > 65535) return res.status(400).json({ error: 'Poort moet een getal tussen 1 en 65535 zijn.' });
+  const printerNaamTrimmed = printerNaam != null ? String(printerNaam).trim() : '';
+  if (!naamTrimmed || !printerNaamTrimmed) return res.status(400).json({ error: 'Naam en Windows-printernaam (voor labels) zijn verplicht.' });
   const id = crypto.randomUUID();
   const token = crypto.randomBytes(24).toString('hex');
   printStationsStore[id] = {
@@ -1079,11 +1110,11 @@ app.post('/api/settings/print-stations', (req, res) => {
     token: token,
     createdAt: new Date().toISOString(),
     lastSeenAt: null,
-    label: { printerIp: ipTrimmed, printerPort: poort, formaat: 'A6', previewFirst: true },
+    label: { printerNaam: printerNaamTrimmed, formaat: 'A6', previewFirst: true },
     // Pakbonprinter is bewust leeg bij aanmaken - Pieter vult 'm apart in via
     // de Afdrukopties-instellingen (of kiest 'm uit de door de print-agent
-    // gedetecteerde netwerkprinters), zodra de print-agent op deze pc draait.
-    pakbon: { printerIp: '', printerPort: 9100, formaat: 'A4', previewFirst: true },
+    // gedetecteerde Windows-printers), zodra de print-agent op deze pc draait.
+    pakbon: { printerNaam: '', formaat: 'A4', previewFirst: true },
     detectedPrinters: []
   };
   savePrintStations(printStationsStore);
@@ -1091,9 +1122,9 @@ app.post('/api/settings/print-stations', (req, res) => {
 });
 
 // Werkt de label- en/of pakbon-printerconfiguratie van 1 station bij (naam,
-// IP/poort, formaat, preview-schakelaar). Overschrijft alleen de meegegeven
-// delen - stuur bv. alleen { pakbon: {...} } mee om enkel de pakbonprinter
-// aan te passen zonder de labelconfiguratie aan te raken.
+// Windows-printernaam, formaat, preview-schakelaar). Overschrijft alleen de
+// meegegeven delen - stuur bv. alleen { pakbon: {...} } mee om enkel de
+// pakbonprinter aan te passen zonder de labelconfiguratie aan te raken.
 app.patch('/api/settings/print-stations/:id', (req, res) => {
   const s = printStationsStore[req.params.id];
   if (!s) return res.status(404).json({ error: 'Station niet gevonden.' });
@@ -1119,11 +1150,12 @@ app.delete('/api/settings/print-stations/:id', (req, res) => {
 });
 
 // Genereert het kleine print-agent-scriptje voor 1 station, met het eigen
-// token/printer-IP er al in verwerkt - de medewerker hoeft alleen nog maar
-// "node print-agent.js" te draaien op die pc. Puur Node core modules
-// (http/https/net), geen npm install nodig. Kan altijd opnieuw gedownload
-// worden (bv. na een IP-wijziging van de printer) - het token wordt niet
-// ingetrokken bij het downloaden.
+// token/printernaam er al in verwerkt - de medewerker hoeft alleen nog maar
+// "node print-agent.js" te draaien op die pc. Gebruikt verder alleen Node
+// core modules; SumatraPDF (voor het echte, merkonafhankelijke printen, zie
+// buildPrintAgentScript) wordt door het scriptje zelf eenmalig gedownload.
+// Kan altijd opnieuw gedownload worden (bv. na het wijzigen van de gekozen
+// printer) - het token wordt niet ingetrokken bij het downloaden.
 app.get('/api/settings/print-stations/:id/agent-script', (req, res) => {
   const s = printStationsStore[req.params.id];
   if (!s) return res.status(404).send('Station niet gevonden.');
@@ -1133,10 +1165,8 @@ app.get('/api/settings/print-stations/:id/agent-script', (req, res) => {
     token: s.token,
     naam: s.naam,
     stationId: s.id,
-    labelIp: s.label.printerIp,
-    labelPort: s.label.printerPort,
-    pakbonIp: s.pakbon.printerIp,
-    pakbonPort: s.pakbon.printerPort
+    labelPrinterNaam: s.label.printerNaam,
+    pakbonPrinterNaam: s.pakbon.printerNaam
   });
   const safeNaam = s.naam.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'station';
   res.set('Content-Type', 'application/javascript; charset=utf-8');
@@ -1195,28 +1225,35 @@ function buildPrintAgentScript(cfg) {
   return [
     '// LJ Verzending — print-agent voor station "' + cfg.naam + '"',
     '// Automatisch gegenereerd - draai dit met: node print-agent.js',
-    '// Geen npm install nodig (gebruikt alleen Node core modules).',
-    '// Haalt printjobs op voor dit station en stuurt ze via een kale TCP-',
-    '// verbinding door naar de juiste (netwerk)printer: ZPL-labels naar de',
-    '// labelprinter, PDF-pakbonnen (als bytes, base64 aangeleverd) naar de',
-    '// pakbonprinter. Rapporteert daarnaast elke minuut de Windows-netwerk-',
-    '// printers van deze pc terug (voor het printerkeuzemenu in de',
-    '// instellingen) via PowerShell (Get-Printer/Get-PrinterPort). Herdownload',
-    '// dit bestand als een printer-IP-adres wijzigt.',
+    '// Gebruikt alleen Node core modules; SumatraPDF (zie printPdfOnPrinter',
+    '// hieronder) wordt bij het eerste label/pakbon automatisch eenmalig',
+    '// gedownload, geen handmatige installatie nodig.',
+    '//',
+    '// Sinds 12-09-2026: printen gaat altijd via de Windows-printerdriver (PDF',
+    '// -> SumatraPDF -> gekozen Windows-printernaam), nooit meer via een kale',
+    '// TCP-verbinding met printertaal-specifieke bytes (ZPL e.d.) rechtstreeks',
+    '// naar een IP-adres. Dat laatste bleek niet merkonafhankelijk: op mini',
+    '// inpak sprak de Intermec PM43 gewoon een andere printertaal dan de',
+    '// Zebra, dus kwam er - ondanks een geslaagde TCP-verbinding - niets uit.',
+    '// Door altijd de Windows-driver te gebruiken (net als bij een gewoon',
+    '// "Print"-commando, en zoals Sendcloud dit ook doet) is er precies 1',
+    '// codepad voor elk printermerk: de driver zet de PDF zelf om naar wat',
+    '// die specifieke printer nodig heeft. Herdownload dit bestand als de',
+    '// gekozen printer voor dit station wijzigt.',
     "const http = require('http');",
     "const https = require('https');",
-    "const net = require('net');",
-    "const { exec } = require('child_process');",
+    "const fs = require('fs');",
+    "const os = require('os');",
+    "const path = require('path');",
+    "const { exec, execFile } = require('child_process');",
     '',
     'const BASE_URL = ' + JSON.stringify(cfg.baseUrl) + ';',
     'const TOKEN = ' + JSON.stringify(cfg.token) + ';',
     'const STATION_ID = ' + JSON.stringify(cfg.stationId) + ';',
     'const STATION_NAAM = ' + JSON.stringify(cfg.naam) + ';',
     'const APP_ORIGIN = ' + JSON.stringify(cfg.baseUrl) + ';',
-    'const LABEL_IP = ' + JSON.stringify(cfg.labelIp) + ';',
-    'const LABEL_PORT = ' + JSON.stringify(cfg.labelPort) + ';',
-    'const PAKBON_IP = ' + JSON.stringify(cfg.pakbonIp) + ';',
-    'const PAKBON_PORT = ' + JSON.stringify(cfg.pakbonPort) + ';',
+    'const LABEL_PRINTER_NAAM = ' + JSON.stringify(cfg.labelPrinterNaam) + ';',
+    'const PAKBON_PRINTER_NAAM = ' + JSON.stringify(cfg.pakbonPrinterNaam) + ';',
     'const POLL_MS = 3000;',
     'const DISCOVER_MS = 60000;',
     'const LOCAL_STATUS_PORT = 9743;',
@@ -1247,26 +1284,93 @@ function buildPrintAgentScript(cfg) {
     '  });',
     '}',
     '',
-    '// data: altijd een Buffer met de rauwe bytes (ZPL-label of PDF-pakbon,',
-    '// beide komen als base64 binnen en worden vlak hiervoor gedecodeerd) -',
-    '// gaat als kale bytes over dezelfde raw-socket-verbinding naar de printer,',
-    '// dat is alles wat een netwerkprinter met een TCP/IP-poort (Zebra of',
-    '// anders) nodig heeft.',
-    '// Belangrijk: de verbinding NIET meteen na het schrijven sluiten - de',
-    '// Zebra ZT410 (getest door Pieter, 2026-09-11) accepteert de TCP-',
-    '// verbinding en de bytes zonder fout, maar verwerkt het label niet als',
-    '// de socket meteen daarna alweer dichtgaat (geen enkele reactie, geen',
-    '// foutmelding). Een korte pauze vóór socket.end() gaf in die test',
-    '// betrouwbaar wel een geprint label - vandaar de vertraging hieronder.',
-    'function sendToPrinter(ip, port, data) {',
+    '// --- SumatraPDF: eenmalig, automatisch downloaden + uitpakken --------',
+    '// Vaste versie (i.p.v. een "laatste versie"-link) zodat dit stabiel',
+    '// blijft werken en niet op een onaangekondigd moment ander gedrag krijgt.',
+    'const SUMATRA_VERSION = "3.6.1";',
+    'const SUMATRA_ZIP_URL = "https://www.sumatrapdfreader.org/dl/rel/" + SUMATRA_VERSION + "/SumatraPDF-" + SUMATRA_VERSION + "-64.zip";',
+    'const SUMATRA_EXE = path.join(__dirname, "SumatraPDF.exe");',
+    'let sumatraReadyPromise = null;',
+    '',
+    'function downloadFile(url, destPath) {',
     '  return new Promise(function(resolve, reject) {',
-    '    if (!ip) { reject(new Error("Geen printer-IP ingesteld voor dit documenttype.")); return; }',
-    '    const socket = net.createConnection({ host: ip, port: port }, function() {',
-    '      socket.write(data, function() { setTimeout(function() { socket.end(); }, 2000); });',
+    '    const file = fs.createWriteStream(destPath);',
+    '    https.get(url, function(res) {',
+    '      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {',
+    '        file.close();',
+    '        fs.unlink(destPath, function() {});',
+    '        downloadFile(res.headers.location, destPath).then(resolve, reject);',
+    '        return;',
+    '      }',
+    '      if (res.statusCode !== 200) {',
+    '        file.close();',
+    '        fs.unlink(destPath, function() {});',
+    '        reject(new Error("download mislukt (HTTP " + res.statusCode + ")"));',
+    '        return;',
+    '      }',
+    '      res.pipe(file);',
+    '      file.on("finish", function() { file.close(resolve); });',
+    '    }).on("error", function(e) {',
+    '      fs.unlink(destPath, function() {});',
+    '      reject(e);',
     '    });',
-    '    socket.setTimeout(15000, function() { socket.destroy(new Error("Printer reageerde niet binnen 15 seconden (IP/poort/netwerk controleren)")); });',
-    '    socket.on("close", function() { resolve(); });',
-    '    socket.on("error", reject);',
+    '  });',
+    '}',
+    '',
+    'function psQuote(s) {',
+    '  return "\'" + String(s).replace(/\'/g, "\'\'") + "\'";',
+    '}',
+    '',
+    '// Zet zichzelf maar 1x in werking, ook als er meerdere printjobs vlak na',
+    '// elkaar binnenkomen terwijl de download nog bezig is (sumatraReadyPromise',
+    '// wordt hergebruikt i.p.v. dat elke job een eigen download start).',
+    'function ensureSumatraPdf() {',
+    '  if (fs.existsSync(SUMATRA_EXE)) return Promise.resolve(SUMATRA_EXE);',
+    '  if (sumatraReadyPromise) return sumatraReadyPromise;',
+    '  sumatraReadyPromise = (async function() {',
+    '    console.log("[print-agent] SumatraPDF (voor stil printen via de Windows-printerdriver) wordt eenmalig gedownload...");',
+    '    const zipPath = path.join(__dirname, "sumatra-download.zip");',
+    '    await downloadFile(SUMATRA_ZIP_URL, zipPath);',
+    '    await new Promise(function(resolve, reject) {',
+    '      const psCmd = "Expand-Archive -LiteralPath " + psQuote(zipPath) + " -DestinationPath " + psQuote(__dirname) + " -Force";',
+    '      const encoded = Buffer.from(psCmd, "utf16le").toString("base64");',
+    '      exec("powershell -NoProfile -NonInteractive -EncodedCommand " + encoded, { timeout: 30000 }, function(err) {',
+    '        if (err) { reject(err); return; }',
+    '        resolve();',
+    '      });',
+    '    });',
+    '    fs.unlink(zipPath, function() {});',
+    '    const gevonden = fs.readdirSync(__dirname).filter(function(f) { return /^SumatraPDF.*\\.exe$/i.test(f); });',
+    '    if (!gevonden.length) throw new Error("kon SumatraPDF.exe niet vinden na het uitpakken");',
+    '    const uitgepakt = path.join(__dirname, gevonden[0]);',
+    '    if (uitgepakt !== SUMATRA_EXE) fs.copyFileSync(uitgepakt, SUMATRA_EXE);',
+    '    console.log("[print-agent] SumatraPDF gereed.");',
+    '    return SUMATRA_EXE;',
+    '  })();',
+    '  return sumatraReadyPromise;',
+    '}',
+    '',
+    '// --- Printen: altijd dezelfde weg, ongeacht printermerk -----------------',
+    '// pdfBuffer gaat naar een tijdelijk bestand en wordt daarna stil (geen',
+    '// vensters, geen printvenster) via SumatraPDF naar de opgegeven Windows-',
+    '// printernaam gestuurd - exact dezelfde manier als een normale "Print"-',
+    '// opdracht vanuit een programma, alleen dan zonder de dialoogvensters.',
+    '// "-print-settings noscale": het PDF-document (Trunkrs-label of onze',
+    '// eigen pakbon) staat al op het juiste formaat, dus niet laten schalen.',
+    'function printPdfOnPrinter(printerNaam, pdfBuffer) {',
+    '  return ensureSumatraPdf().then(function(sumatraPath) {',
+    '    return new Promise(function(resolve, reject) {',
+    '      if (!printerNaam) { reject(new Error("Geen Windows-printer ingesteld voor dit documenttype.")); return; }',
+    '      const tmpFile = path.join(os.tmpdir(), "lj-print-" + Date.now() + "-" + Math.random().toString(36).slice(2) + ".pdf");',
+    '      fs.writeFile(tmpFile, pdfBuffer, function(err) {',
+    '        if (err) { reject(err); return; }',
+    '        execFile(sumatraPath, ["-print-to", printerNaam, "-silent", "-exit-when-done", "-print-settings", "noscale", tmpFile], { timeout: 30000 }, function(err2) {',
+    '          fs.unlink(tmpFile, function() {});',
+    '          if (err2) { reject(new Error("SumatraPDF-printopdracht mislukt (printernaam \'" + printerNaam + "\' correct overgenomen uit Windows?): " + err2.message)); return; }',
+    '          resolve();',
+    '        });',
+    '      });',
+    '    });',
     '  });',
     '}',
     '',
@@ -1275,11 +1379,8 @@ function buildPrintAgentScript(cfg) {
     '    const jobs = await apiRequest("GET", "/api/print-agent/jobs");',
     '    for (const job of (jobs.jobs || [])) {',
     '      try {',
-    '        if (job.type === "pdf") {',
-    '          await sendToPrinter(PAKBON_IP, PAKBON_PORT, Buffer.from(job.content, "base64"));',
-    '        } else {',
-    '          await sendToPrinter(LABEL_IP, LABEL_PORT, Buffer.from(job.content, "base64"));',
-    '        }',
+    '        const printerNaam = job.type === "pakbon" ? PAKBON_PRINTER_NAAM : LABEL_PRINTER_NAAM;',
+    '        await printPdfOnPrinter(printerNaam, Buffer.from(job.content, "base64"));',
     '        await apiRequest("POST", "/api/print-agent/jobs/" + job.id + "/ack", { ok: true });',
     '        console.log("[print-agent] " + job.type + " geprint voor order " + job.orderNumber);',
     '      } catch (e) {',
@@ -1293,12 +1394,11 @@ function buildPrintAgentScript(cfg) {
     '  setTimeout(tick, POLL_MS);',
     '}',
     '',
-    '// Vraagt Windows via PowerShell om alle geïnstalleerde printers met hun',
-    '// poort, en zoekt daarbij (waar mogelijk) het IP-adres op via de',
-    '// TCP/IP-printerpoort (PrinterHostAddress) - dat is het adres dat je',
-    '// hier ook zou intypen. Printers zonder netwerk-IP (bv. USB) komen niet',
-    '// mee in de lijst, want daar heeft deze print-agent toch niets aan.',
-    'const PS_CMD = "Get-Printer | ForEach-Object { $p = $_; $port = Get-PrinterPort -Name $p.PortName -ErrorAction SilentlyContinue; if ($port -and $port.PrinterHostAddress) { [PSCustomObject]@{ name = $p.Name; ip = $port.PrinterHostAddress } } } | ConvertTo-Json -Compress";',
+    '// Vraagt Windows via PowerShell om de namen van alle geïnstalleerde',
+    '// printers (netwerk én USB - dat laatste kon met de oude IP-gebaseerde',
+    '// aanpak niet, want die had een netwerkadres nodig; via de Windows-driver',
+    '// maakt dat niet meer uit) voor het printerkeuzemenu in de instellingen.',
+    'const PS_CMD = "Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress";',
     '',
     '// -EncodedCommand (base64 UTF-16LE) i.p.v. de PowerShell-opdracht als',
     '// tekst mee te geven - dat laatste struikelt al snel over de dubbele',
@@ -1313,7 +1413,7 @@ function buildPrintAgentScript(cfg) {
     '    let parsed;',
     '    try { parsed = JSON.parse((stdout || "").trim() || "[]"); } catch (e) { console.error("[print-agent] kon printerlijst niet lezen:", e.message); return; }',
     '    const list = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);',
-    '    const printers = list.filter(function(p) { return p && p.ip; }).map(function(p) { return { name: String(p.name || ""), ip: String(p.ip) }; });',
+    '    const printers = list.filter(Boolean).map(function(naam) { return { name: String(naam) }; });',
     '    apiRequest("POST", "/api/print-agent/printers", { printers: printers }).catch(function(e) {',
     '      console.error("[print-agent] kon gedetecteerde printers niet doorgeven:", e.message);',
     '    });',
@@ -1355,7 +1455,7 @@ function buildPrintAgentScript(cfg) {
     '}',
     '',
     'console.log("[print-agent] gestart voor station \\"' + cfg.naam + '\\""); ',
-    'console.log("[print-agent] label -> " + (LABEL_IP || "(niet ingesteld)") + ":" + LABEL_PORT + ", pakbon -> " + (PAKBON_IP || "(niet ingesteld)") + ":" + PAKBON_PORT);',
+    'console.log("[print-agent] label -> Windows-printer " + JSON.stringify(LABEL_PRINTER_NAAM || "(niet ingesteld)") + ", pakbon -> " + JSON.stringify(PAKBON_PRINTER_NAAM || "(niet ingesteld)"));',
     'console.log("[print-agent] elke " + (POLL_MS/1000) + "s printjobs ophalen bij " + BASE_URL);',
     'tick();',
     'discoverPrinters();',
@@ -1366,9 +1466,22 @@ function buildPrintAgentScript(cfg) {
 }
 
 // Stuurt het (al aangemaakte) Trunkrs-verzendlabel van 1 order als printjob
-// naar 1 specifiek inpakstation. Gebruikt de rauwe ZPL die Trunkrs standaard
-// meelevert naast de PDF (zie trunkrsLabelsStore) - geen extra Trunkrs-call
-// of PDF-conversie nodig.
+// naar 1 specifiek inpakstation.
+//
+// Tot 11-09-2026 gebruikte dit de rauwe ZPL die Trunkrs meelevert, rechtstreeks
+// naar het IP van de labelprinter. Dat bleek geen begaanbare weg: eerst zat
+// er een dubbele base64-laag in (zie de git-historie van dit bestand voor
+// die uitzoekerij), en toen dát opgelost was bleek de Intermec PM43 op mini
+// inpak sowieso een andere printertaal te spreken dan de Zebra op Kantoor
+// Pieter - ZPL is geen universele taal, elk printermerk heeft zijn eigen.
+//
+// Sinds 12-09-2026 (op verzoek van Pieter, die er terecht op wees dat
+// Sendcloud ook geen printer-specifieke uitzonderingen heeft) gebruiken we
+// daarom altijd de PDF-variant van het label en printen die stil via de
+// Windows-printerdriver (zie buildPrintAgentScript/printPdfOnPrinter) - die
+// driver zet 'm zelf om naar wat de aangesloten printer nodig heeft, welk
+// merk dat ook is. Dit is exact dezelfde weg als de pakbon hieronder al
+// gebruikte, dus label en pakbon delen nu ook echt 1 printpad.
 app.post('/api/print-stations/:id/print-label', async (req, res) => {
   const station = printStationsStore[req.params.id];
   if (!station) return res.status(404).json({ error: 'Station niet gevonden.' });
@@ -1376,72 +1489,34 @@ app.post('/api/print-stations/:id/print-label', async (req, res) => {
   const key = bareOrderNumberKey(orderNumber);
   const tl = key && trunkrsLabelsStore[key];
   if (!tl) return res.status(404).json({ error: 'Geen Trunkrs-label bekend voor deze order.' });
-  let zpl = tl.label && tl.label.zpl;
-  if (!zpl) return res.status(422).json({ error: 'Dit label heeft geen ZPL-data (onverwacht - normaal levert Trunkrs dit altijd mee naast de PDF).' });
-  // Trunkrs levert hier in de praktijk een https-URL (net als bij label.pdf,
-  // zie fetchTrunkrsLabelBuffer hierboven), geen kant-en-klare ZPL-tekst. Die
-  // URL zelf naar de printer sturen (de oude aanpak) print geen label maar
-  // letterlijk die URL-tekst - opgemerkt bij het testen van ORD80535
-  // (2026-08-31), toen bleek dat ook het openen van de PDF in de browser om
-  // dezelfde reden (auth) stukliep. Daarom hier eerst de echte ZPL-inhoud
-  // ophalen bij Trunkrs (met x-api-key) voordat we 'm doorsturen naar de
-  // print-agent.
-  //
-  // Sinds 2026-09-03 gaat deze ZPL als base64 (niet als utf8-tekst) de
-  // printjob in: een echt ZPL-label bevat vaak een ingebed vervoerderslogo/
-  // barcode als rauwe binaire bytes, en dat is geen geldige utf8-tekst -
-  // .toString('utf8') beschadigde die bytes dus stilletjes (gevonden doordat
-  // een handmatig verstuurd ASCII-testlabel wel prima printte, maar een
-  // echt Trunkrs-label niet, terwijl de print-agent desondanks "geprint"
-  // meldde - de rauwe TCP-verbinding zelf lukte immers gewoon). De print-
-  // agent decodeert dit vlak vóór het printen terug naar bytes (zie
-  // buildPrintAgentScript hieronder), exact hetzelfde patroon als bij de
-  // pakbon-PDF's.
-  //
-  // Update 11-09-2026: die eerdere fix voegde hier ONVOORWAARDELIJK een
-  // base64-laag toe bovenop wat fetchTrunkrsLabelBuffer teruggeeft. Bij
-  // uitzoeken van een order (80916) waarvoor de print-agent "geprint"
-  // meldde maar er niets uit de printer kwam, bleek dat Trunkrs de ZPL op
-  // deze url in de praktijk zelf al als base64-tekst aanlevert (in
-  // tegenstelling tot de PDF-variant, die wel kale binaire bytes teruggeeft)
-  // - bevestigd doordat een handmatige test die de inhoud van
-  // /api/trunkrs/label-file/:orderNumber?format=zpl één keer base64-
-  // decodeerde wél een goed label printte. Het hier nogmaals coderen met
-  // .toString('base64') maakte er dus base64-van-base64 van: de print-agent
-  // decodeerde vervolgens maar één laag terug en stuurde de leesbare
-  // base64-tekst zelf (geen geldige ZPL, begint niet met ^XA) naar de
-  // printer - die negeert dat stilletjes, vandaar "geprint" zonder dat er
-  // iets uitkwam. Base64-tekst bestaat alleen uit A-Za-z0-9+/= (en evt.
-  // newlines); komt de opgehaalde inhoud daarmee overeen, dan is 'm al
-  // base64 en sturen we 'm ongewijzigd door. Bevat het iets anders (kale
-  // ZPL-tekst of rauwe binaire bytes, zoals Trunkrs dat voor andere
-  // documenttypen of in de toekomst misschien ook voor ZPL gaat doen), dan
-  // coderen we 'm hier alsnog naar base64 - dat dekt beide gevallen.
-  function toJobBase64(buf) {
-    const asText = buf.toString('utf8').trim();
-    const looksAlreadyBase64 = asText.length > 0 && /^[A-Za-z0-9+/=\s]+$/.test(asText);
-    return looksAlreadyBase64 ? asText.replace(/\s+/g, '') : buf.toString('base64');
-  }
-  if (/^https?:/i.test(zpl)) {
-    try {
-      zpl = toJobBase64(await fetchTrunkrsLabelBuffer(zpl));
-    } catch (e) {
-      const detail = e.response ? JSON.stringify(e.response.data) : e.message;
-      console.error('print-label: ZPL ophalen bij Trunkrs mislukt voor order ' + key + ':', detail);
-      return res.status(502).json({ error: 'ZPL ophalen bij Trunkrs mislukt: ' + detail });
+  const pdfSrc = tl.label && tl.label.pdf;
+  if (!pdfSrc) return res.status(422).json({ error: 'Dit label heeft geen PDF-data (onverwacht - normaal levert Trunkrs dit altijd mee).' });
+  let pdfBuffer;
+  try {
+    if (/^https?:/i.test(pdfSrc)) {
+      // Trunkrs levert hier in de praktijk een https-URL (met auth erachter,
+      // vandaar server-side ophalen i.p.v. de url zelf doorgeven - zie ook
+      // /api/trunkrs/label-file hieronder waar hetzelfde speelde).
+      pdfBuffer = await fetchTrunkrsLabelBuffer(pdfSrc);
+    } else if (/^data:/i.test(pdfSrc)) {
+      // Testdata-fallback (mock-Trunkrs levert soms al een kant-en-klare
+      // data:-URI zonder tussenliggende url).
+      pdfBuffer = Buffer.from(pdfSrc.split(',')[1] || '', 'base64');
+    } else {
+      pdfBuffer = Buffer.from(pdfSrc, 'base64');
     }
-  } else {
-    // Zeldzaam pad: Trunkrs leverde deze keer al kant-en-klare ZPL-tekst
-    // i.p.v. een URL - ook dan moet de printjob consistent base64 bevatten.
-    zpl = toJobBase64(Buffer.from(zpl, 'utf8'));
+  } catch (e) {
+    const detail = e.response ? JSON.stringify(e.response.data) : e.message;
+    console.error('print-label: PDF ophalen bij Trunkrs mislukt voor order ' + key + ':', detail);
+    return res.status(502).json({ error: 'Label ophalen bij Trunkrs mislukt: ' + detail });
   }
   const jobId = crypto.randomUUID();
   printJobsStore[jobId] = {
     id: jobId,
     stationId: station.id,
     orderNumber: key,
-    type: 'zpl',
-    content: zpl,
+    type: 'label',
+    content: pdfBuffer.toString('base64'),
     status: 'pending',
     createdAt: new Date().toISOString(),
     deliveredAt: null,
@@ -1455,7 +1530,7 @@ app.post('/api/print-stations/:id/print-label', async (req, res) => {
 // Rendert de door de klant/client al opgebouwde pakbon-HTML (dezelfde HTML
 // die tot 2026-08-31 rechtstreeks naar een nieuw browsertabblad ging voor
 // window.print()) server-side naar echte PDF-bytes en stuurt die als
-// printjob (type 'pdf') naar de pakbonprinter van 1 specifiek inpakstation.
+// printjob (type 'pakbon') naar de pakbonprinter van 1 specifiek inpakstation.
 // Hergebruikt bewust de bestaande, al werkende pakbon-layout/-opmaak in
 // plaats van die server-side opnieuw op te bouwen - puppeteer rendert exact
 // dezelfde HTML/CSS/JS (incl. de JsBarcode-barcode) als de browser zou doen.
@@ -1471,7 +1546,7 @@ app.post('/api/print-stations/:id/print-pakbon', async (req, res) => {
       id: jobId,
       stationId: station.id,
       orderNumber: Array.isArray(orderNumbers) ? orderNumbers.map(bareOrderNumberKey).join(',') : '',
-      type: 'pdf',
+      type: 'pakbon',
       content: pdfBuffer.toString('base64'),
       status: 'pending',
       createdAt: new Date().toISOString(),
@@ -1499,18 +1574,21 @@ app.get('/api/print-agent/jobs', requirePrintAgentToken, (req, res) => {
     .filter(function(j) { return j.stationId === station.id && j.status === 'pending'; });
   jobs.forEach(function(j) { j.status = 'delivered'; j.deliveredAt = new Date().toISOString(); });
   if (jobs.length) savePrintJobs(printJobsStore);
-  res.json({ jobs: jobs.map(function(j) { return { id: j.id, orderNumber: j.orderNumber, type: j.type || 'zpl', content: j.content != null ? j.content : j.zpl, createdAt: j.createdAt }; }) });
+  res.json({ jobs: jobs.map(function(j) { return { id: j.id, orderNumber: j.orderNumber, type: j.type || 'label', content: j.content != null ? j.content : j.zpl, createdAt: j.createdAt }; }) });
 });
 
-// Ontvangt de door de print-agent gedetecteerde Windows-netwerkprinters
-// (zie discoverPrinters() in buildPrintAgentScript) en bewaart ze bij het
+// Ontvangt de door de print-agent gedetecteerde Windows-printers (zie
+// discoverPrinters() in buildPrintAgentScript) en bewaart ze bij het
 // station, zodat de instellingenpagina er een keuzelijst van kan tonen i.p.v.
-// dat Pieter zelf IP-adressen moet opzoeken en overtypen.
+// dat Pieter zelf de exacte Windows-printernaam moet opzoeken en overtypen.
+// Sinds 12-09-2026 alleen nog de naam (geen IP meer nodig, want er wordt
+// altijd via de Windows-driver geprint - dat werkt dus ook voor USB-
+// aangesloten printers, die voorheen niet in deze lijst konden voorkomen).
 app.post('/api/print-agent/printers', requirePrintAgentToken, (req, res) => {
   const station = req.printStation;
   const { printers } = req.body || {};
   station.detectedPrinters = Array.isArray(printers)
-    ? printers.filter(function(p) { return p && p.ip; }).map(function(p) { return { name: String(p.name || '').trim() || p.ip, ip: String(p.ip).trim() }; })
+    ? printers.filter(function(p) { return p && p.name; }).map(function(p) { return { name: String(p.name).trim() }; })
     : [];
   station.lastSeenAt = new Date().toISOString();
   savePrintStations(printStationsStore);
