@@ -52,6 +52,15 @@ const TRUNKRS_WAREHOUSE_SCAN_OR_LATER_CODES = [
 // om aparte aandacht i.p.v. stilzwijgend als "verzonden" te tellen. Zulke
 // orders blijven in "Gecreëerde labels" staan, met hun eigen statusbadge.
 
+// Codes die we als "definitief bezorgd" beschouwen - gebruikt om te bepalen
+// wanneer we mogen stoppen met statussen verversen bij Trunkrs (zie
+// /api/trunkrs/refresh-statuses hieronder). Bewust een kleinere set dan
+// TRUNKRS_WAREHOUSE_SCAN_OR_LATER_CODES hierboven: SHIPMENT_NOT_DELIVERED is
+// een mislukte bezorgpoging, geen eindstatus - daar kan nog een nieuwe
+// poging op volgen, dus die blijven we gewoon pollen (tot de 14-dagen-
+// afkap hieronder).
+const TRUNKRS_DELIVERED_CODES = ['SHIPMENT_DELIVERED', 'SHIPMENT_DELIVERED_TO_NEIGHBOR'];
+
 // --- Pack & Go: aparte PIN-beveiliging (wie heeft een label geprint?) ----
 // Op verzoek van Pieter (2026-08-29): geen volledige gebruikersaccounts,
 // alleen een lichte PIN-check specifiek voor het Pack & Go-scherm, zodat
@@ -1699,11 +1708,30 @@ res.status(500).json({ error: 'Label annuleren mislukt: ' + detail });
 // Fase-2-webhooks (automatisch, zie project-notities) zijn nog niet gebouwd;
 // dit endpoint pollt op aanvraag (bv. bij het openen van een tabblad) i.p.v.
 // continu op de achtergrond, om binnen de Trunkrs-rate-limits te blijven.
+// Hoe lang blijven we een label meenemen in de refresh-poll hieronder -
+// zonder afkap wordt dit elke keer dat iemand "Gecreëerde labels" of
+// "Verzonden" opent een lookup bij Trunkrs voor ELK label dat ooit is
+// aangemaakt, ook labels van maanden geleden die allang bezorgd zijn. Dat
+// kost niets zolang de winkel klein is, maar schaalt met het totale aantal
+// ooit aangemaakte labels i.p.v. met de dagelijkse drukte, en loopt zo op
+// termijn tegen Trunkrs' eigen rate limit aan - precies het probleem dat we
+// eerder al bij Lightspeed hadden (zie mapWithConcurrency hierboven).
+// Op verzoek van Pieter (12-09-2026): een label stopt met pollen zodra het
+// 14 dagen oud is (sowieso niet meer relevant), of zodra het al 12 uur
+// geleden voor het eerst op "bezorgd" stond (nog een korte marge voor een
+// eventuele latere statuscorrectie van Trunkrs, maar niet voor altijd).
+const TRUNKRS_REFRESH_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const TRUNKRS_REFRESH_DELIVERED_GRACE_MS = 12 * 60 * 60 * 1000;
+
 app.post('/api/trunkrs/refresh-statuses', async (req, res) => {
 if (!TRUNKRS_API_KEY) return res.status(503).json({ error: 'TRUNKRS_API_KEY is niet ingesteld (Railway env var).' });
+const now = Date.now();
 const keys = Object.keys(trunkrsLabelsStore).filter(function(k) {
 const entry = trunkrsLabelsStore[k];
-return entry && entry.trunkrsNr && !entry.cancelledAt;
+if (!entry || !entry.trunkrsNr || entry.cancelledAt) return false;
+if (entry.createdAt && (now - new Date(entry.createdAt).getTime()) > TRUNKRS_REFRESH_MAX_AGE_MS) return false;
+if (entry.deliveredAt && (now - new Date(entry.deliveredAt).getTime()) > TRUNKRS_REFRESH_DELIVERED_GRACE_MS) return false;
+return true;
 });
 let orderStatusChanged = false;
 try {
@@ -1713,11 +1741,17 @@ try {
 const r = await axios.get(TRUNKRS_BASE_URL + '/shipments/' + entry.trunkrsNr, { headers: trunkrsHeaders() });
 const data = (r.data && r.data.data) ? r.data.data : r.data;
 if (data && data.state) entry.state = data.state;
+const code = data && data.state && data.state.code;
+// Peildatum voor de 12-uurs-afkap hierboven - alleen de eerste keer
+// gezet (nooit overschrijven), anders schuift "12 uur na bezorgd" elke
+// refresh weer op en stopt het nooit met pollen.
+if (code && TRUNKRS_DELIVERED_CODES.indexOf(code) !== -1 && !entry.deliveredAt) {
+entry.deliveredAt = new Date().toISOString();
+}
 // Automatische overgang "Gecreëerde labels" -> "Verzonden" zodra Trunkrs
 // de zending voor het eerst fysiek scant (binnenkomst/sortering op hun
 // warehouse) - op verzoek van Pieter (2026-08-29). Alleen vooruit, nooit
 // een al op "geannuleerd" gezette order overschrijven.
-const code = data && data.state && data.state.code;
 if (code && TRUNKRS_WAREHOUSE_SCAN_OR_LATER_CODES.indexOf(code) !== -1 &&
 orderStatusStore[key] !== 'geannuleerd' && orderStatusStore[key] !== 'verzonden') {
 orderStatusStore[key] = 'verzonden';
