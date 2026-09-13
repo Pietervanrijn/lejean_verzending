@@ -3,6 +3,7 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
 const crypto = require('crypto');
+const { PDFDocument, degrees } = require('pdf-lib');
 const app = express();
 // Railway zet TLS af bij zijn eigen proxy en stuurt intern gewoon HTTP door
 // naar deze container. Zonder "trust proxy" denkt Express daardoor dat elk
@@ -978,6 +979,31 @@ const r = await axios.get(url, { headers: trunkrsHeaders(), responseType: 'array
 return Buffer.from(r.data);
 }
 
+// Trunkrs levert het verzendlabel-PDF liggend aan (breder dan hoog, ca.
+// 160x105mm), terwijl de Zebra-printers op de inpakstations al langer op
+// staand etiketformaat staan ingesteld (nodig voor Sendcloud, dat wél
+// staande labels levert - Pieter wil de printerinstellingen bewust niet
+// aanpassen, dat zou Sendcloud juist weer breken). Zonder correctie wordt
+// het liggende Trunkrs-PDF "noscale" op een staand canvas geplaatst en komt
+// het gedraaid/afgesneden uit de printer (ontdekt 13-09-2026, foto van een
+// fysiek label bevestigde het patroon 1-op-1 met een testrotatie van
+// precies dit PDF). Draait hier daarom zelf 270° (tegen de klok in) zodat
+// het label past op het al bestaande, ongewijzigde staande printerprofiel -
+// zelfde aanpak als bij de printerdriver-omschakeling in PR #44: het
+// probleem in software oplossen i.p.v. per-printer instellingen aanpassen.
+// Raakt alleen de automatische print-agent-route hieronder; het handmatig
+// bekijken/downloaden van een label (/api/trunkrs/label-file) blijft het
+// PDF ongewijzigd tonen zoals Trunkrs het aanlevert.
+async function rotateLandscapeLabelPdf(buffer) {
+const pdfDoc = await PDFDocument.load(buffer);
+const page = pdfDoc.getPage(0);
+const { width, height } = page.getSize();
+if (width > height) {
+page.setRotation(degrees(270));
+}
+return Buffer.from(await pdfDoc.save());
+}
+
 // --- Pakbon-PDF-rendering (voor direct/silent printen naar de pakbonprinter) --
 // Rendert de door de browser-client opgebouwde pakbon-HTML (dezelfde HTML
 // die tot 2026-08-31 alleen via window.print() gebruikt werd) server-side
@@ -1509,6 +1535,15 @@ app.post('/api/print-stations/:id/print-label', async (req, res) => {
     const detail = e.response ? JSON.stringify(e.response.data) : e.message;
     console.error('print-label: PDF ophalen bij Trunkrs mislukt voor order ' + key + ':', detail);
     return res.status(502).json({ error: 'Label ophalen bij Trunkrs mislukt: ' + detail });
+  }
+  try {
+    pdfBuffer = await rotateLandscapeLabelPdf(pdfBuffer);
+  } catch (e) {
+    // Mag het aanmaken van de printjob niet blokkeren - dan liever het
+    // origineel (mogelijk verkeerd gedraaid) label printen dan helemaal
+    // niets. Zou normaal nooit mogen gebeuren (Trunkrs levert altijd een
+    // geldig PDF), dus wel loggen om op te vallen.
+    console.error('print-label: label roteren mislukt voor order ' + key + ':', e.message);
   }
   const jobId = crypto.randomUUID();
   printJobsStore[jobId] = {
