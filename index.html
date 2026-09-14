@@ -643,6 +643,24 @@ if (updatedEl) updatedEl.classList.remove('is-refreshing');
 }
 }
 
+// Zelfde behoud-logica als hierboven in loadOrders(), maar dan als
+// herbruikbare helper - nodig voor refreshLabelView()/refreshVerzondenView()
+// (tabblad "Gecreëerde labels"/"Verzonden"), die o.a. ook automatisch
+// herbouwen na de Trunkrs-statusverversing (elke tabwissel, en de "Statussen
+// verversen"-knop) en na het printen/afmelden van 1 label. Zonder dit werd
+// een net aangevinkte selectie daar na een paar seconden vanzelf weer leeg
+// (gemeld door Pieter 14-09-2026), omdat renderLabelOrders/renderVerzondenOrders
+// de tabel altijd volledig opnieuw opbouwt.
+function preserveCheckedSelection(renderFn) {
+var checkedNums = Array.prototype.map.call(document.querySelectorAll('.order-checkbox:checked'), function(cb) { return cb.getAttribute('data-num'); }).filter(Boolean);
+renderFn();
+if (checkedNums.length) {
+document.querySelectorAll('.order-checkbox').forEach(function(cb) {
+if (checkedNums.indexOf(cb.getAttribute('data-num')) !== -1) cb.checked = true;
+});
+}
+}
+
 // Verzendmethode-namen bevatten vaak zelf al een concrete bezorgdatum/tijd
 // (bv. "Maandag 31 augustus (17:00-22:30)", "DAGBEZORGING donderdag 10
 // september (8:00-18:00)"). Die datum bepaalt wanneer een order echt
@@ -2481,7 +2499,7 @@ var total = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') 
 document.getElementById('count').textContent = total;
 var fc = document.getElementById('labelFilterCount');
 if (fc) fc.textContent = (labelSearchQuery || labelDateRange !== 'aangepast' || labelDateFrom || labelDateTo) ? filtered.length + ' van ' + total + ' labels' : total + ' labels totaal';
-renderLabelOrders(filtered);
+preserveCheckedSelection(function() { renderLabelOrders(filtered); });
 updateSelection();
 }
 
@@ -2523,7 +2541,7 @@ var total = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') 
 document.getElementById('count').textContent = total;
 var fc = document.getElementById('verzondenFilterCount');
 if (fc) fc.textContent = (verzondenSearchQuery || verzondenDateRange !== 'aangepast' || verzondenDateFrom || verzondenDateTo) ? filtered.length + ' van ' + total + ' verzonden orders' : total + ' verzonden orders totaal';
-renderVerzondenOrders(filtered);
+preserveCheckedSelection(function() { renderVerzondenOrders(filtered); });
 updateSelection();
 }
 
