@@ -1007,9 +1007,12 @@ async function rotateLandscapeLabelPdf(buffer) {
 const pdfDoc = await PDFDocument.load(buffer);
 const page = pdfDoc.getPage(0);
 const { width, height } = page.getSize();
-if (width > height) {
+if (width <= height) return buffer;
+// Alleen opnieuw serialiseren (pdfDoc.save(), niet gratis) als er ook echt
+// iets gedraaid is - scheelt die stap in het (in de praktijk nooit
+// voorkomende, maar voor de snelheid geen enkele reden om 'm dan alsnog te
+// doen) geval dat Trunkrs ooit al staand aanlevert.
 page.setRotation(degrees(270));
-}
 return Buffer.from(await pdfDoc.save());
 }
 
@@ -1347,7 +1350,12 @@ function buildPrintAgentScript(cfg) {
     'const APP_ORIGIN = ' + JSON.stringify(cfg.baseUrl) + ';',
     'const LABEL_PRINTER_NAAM = ' + JSON.stringify(cfg.labelPrinterNaam) + ';',
     'const PAKBON_PRINTER_NAAM = ' + JSON.stringify(cfg.pakbonPrinterNaam) + ';',
-    'const POLL_MS = 3000;',
+    '// 1s i.p.v. 3s sinds 14-09-2026: hoe hoger dit staat, hoe langer het duurt',
+    '// tussen scannen en fysiek printen (in het slechtste geval wacht de',
+    '// vorige tick nog bijna de volledige POLL_MS voordat een nieuwe',
+    '// printopdracht wordt opgehaald). 1x per seconde ophalen per station is',
+    '// verwaarloosbaar voor de server, en scheelt tot 2s wachttijd per label.',
+    'const POLL_MS = 1000;',
     'const DISCOVER_MS = 60000;',
     'const LOCAL_STATUS_PORT = 9743;',
     '',
