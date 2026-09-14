@@ -1227,6 +1227,62 @@ app.get('/api/settings/print-stations/:id/agent-launcher.bat', (req, res) => {
   res.send(bat);
 });
 
+// Eén-bestand-starter (sinds 14-09-2026, op verzoek van Pieter: het twee-
+// bestanden-systeem hierboven - los .js-scriptje + los .bat-starter, die
+// toevallig in dezelfde map moesten staan - bleek in de praktijk te
+// omslachtig/foutgevoelig. Dit .bat-bestand is nu het ENIGE dat gedownload
+// hoeft te worden: bij elke start haalt het zelf de laatste versie van het
+// scriptje op (via /api/print-agent/self-update, met het eigen ingebakken
+// station-token) en bewaart die als vaste bestandsnaam naast zichzelf, dus
+// geen wildcards/"(1)"-varianten meer nodig. Voordeel t.o.v. het oude
+// systeem: een serverfix of een gewijzigde printerkeuze werkt vanzelf mee
+// bij de eerstvolgende (her)start, zonder dat iemand handmatig iets hoeft
+// te herdownloaden. Lukt het verversen niet (geen internet/server niet
+// bereikbaar), dan valt hij terug op de laatst bekende lokale kopie, zodat
+// een tijdelijke storing niet meteen het printen blokkeert.
+function buildPrintAgentStartBat(cfg) {
+  const scriptBestand = 'print-agent-' + cfg.safeNaam + '.js';
+  return [
+    '@echo off',
+    'cd /d "%~dp0"',
+    'echo Print-agent voor station "' + cfg.naam + '" wordt gestart...',
+    'echo Scriptje wordt eerst ververst...',
+    'curl -fsS -H "Authorization: Bearer ' + cfg.token + '" "' + cfg.baseUrl + '/api/print-agent/self-update" -o "' + scriptBestand + '.new" 2>nul',
+    'if %errorlevel%==0 (',
+    '  move /y "' + scriptBestand + '.new" "' + scriptBestand + '" >nul',
+    ') else (',
+    '  del "' + scriptBestand + '.new" 2>nul',
+    '  if not exist "' + scriptBestand + '" (',
+    '    echo Kon het scriptje niet ophalen ^(geen internet, of de LJ Verzending-server is niet bereikbaar^)',
+    '    echo en er is ook nog geen eerder gedownloade versie in deze map. Printen is nu niet mogelijk.',
+    '    pause',
+    '    exit /b 1',
+    '  )',
+    '  echo Kon niet verversen ^(geen internet?^) - ga verder met de laatst bekende versie.',
+    ')',
+    'echo Laat dit venster openstaan zolang je labels/pakbonnen wilt kunnen printen.',
+    'echo.',
+    'node "' + scriptBestand + '"',
+    'pause'
+  ].join('\r\n') + '\r\n';
+}
+
+// Nieuwe, simpelere manier om de print-agent te starten - zie
+// buildPrintAgentStartBat hierboven. Dit is voortaan de enige download die
+// nodig is; de oudere agent-script/agent-launcher.bat routes hierboven/
+// hieronder blijven bestaan voor wie ze al gebruikt, maar de knop in de
+// instellingenpagina wijst naar deze route.
+app.get('/api/settings/print-stations/:id/agent-start.bat', (req, res) => {
+  const s = printStationsStore[req.params.id];
+  if (!s) return res.status(404).send('Station niet gevonden.');
+  const baseUrl = req.protocol + '://' + req.get('host');
+  const safeNaam = s.naam.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'station';
+  const bat = buildPrintAgentStartBat({ baseUrl: baseUrl, token: s.token, naam: s.naam, safeNaam: safeNaam });
+  res.set('Content-Type', 'application/bat; charset=utf-8');
+  res.set('Content-Disposition', 'attachment; filename="print-agent-' + safeNaam + '.bat"');
+  res.send(bat);
+});
+
 function buildPrintAgentLauncherBat(cfg) {
   // \r\n: Windows .bat-bestanden verwachten CRLF-regeleindes.
   //
@@ -1618,6 +1674,32 @@ app.post('/api/print-stations/:id/print-pakbon', async (req, res) => {
 // --- Print-agent-endpoints (eigen token, geen kantoor-Basic-Auth) --------
 // Zie requirePrintAgentToken hierboven en de bypass in de Basic-Auth-
 // middleware bovenaan dit bestand.
+
+// Levert hetzelfde scriptje als /api/settings/print-stations/:id/agent-script,
+// maar met het eigen station-token i.p.v. de kantoor-Basic-Auth - zodat de
+// pc dit zelf kan opvragen (zie buildPrintAgentStartBat) zonder dat daar
+// het kantoor-wachtwoord voor nodig/ingebakken is. Toegevoegd 14-09-2026:
+// hiervoor moest je na élke serverfix (of na het wijzigen van de gekozen
+// printer) het scriptje handmatig opnieuw downloaden en het oude venster
+// sluiten/herstarten - in de praktijk werd dat vaak vergeten, waardoor een
+// station soms weken met een verouderd scriptje bleef draaien. Nu haalt de
+// .bat dit bij elke start zelf op, dus een fix/wijziging landt vanzelf de
+// eerstvolgende keer dat iemand de print-agent (her)start.
+app.get('/api/print-agent/self-update', requirePrintAgentToken, (req, res) => {
+  const s = req.printStation;
+  const baseUrl = req.protocol + '://' + req.get('host');
+  const script = buildPrintAgentScript({
+    baseUrl: baseUrl,
+    token: s.token,
+    naam: s.naam,
+    stationId: s.id,
+    labelPrinterNaam: s.label.printerNaam,
+    pakbonPrinterNaam: s.pakbon.printerNaam
+  });
+  res.set('Content-Type', 'application/javascript; charset=utf-8');
+  res.send(script);
+});
+
 app.get('/api/print-agent/jobs', requirePrintAgentToken, (req, res) => {
   const station = req.printStation;
   station.lastSeenAt = new Date().toISOString();
