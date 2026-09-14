@@ -650,7 +650,7 @@ if (updatedEl) updatedEl.classList.remove('is-refreshing');
 // verversen"-knop) en na het printen/afmelden van 1 label. Zonder dit werd
 // een net aangevinkte selectie daar na een paar seconden vanzelf weer leeg
 // (gemeld door Pieter 14-09-2026), omdat renderLabelOrders/renderVerzondenOrders
-// de tabel altijd volledig opnieuw opbouwt.
+// de tabel altijd volledig opnieuw opbouwen.
 function preserveCheckedSelection(renderFn) {
 var checkedNums = Array.prototype.map.call(document.querySelectorAll('.order-checkbox:checked'), function(cb) { return cb.getAttribute('data-num'); }).filter(Boolean);
 renderFn();
