@@ -576,14 +576,15 @@ return enriched;
 }
 
 // --- Trunkrs: houdbaar/frozen-bepaling -----------------------------------
-// Afspraak met Pieter (2026-08-28): artikelnummers 8000 t/m 9000 zijn
-// "houdbaar". Een order is ALLEEN houdbaar (SAME_DAY) als ALLE producten in
-// de order een artikelnummer in dat bereik hebben; zodra er ook maar 1
-// product buiten dat bereik valt (of het artikelnummer niet numeriek is)
-// wordt de veilige/conservatieve default gebruikt: SAME_DAY_FROZEN_FOOD.
+// Afspraak met Pieter (2026-08-28, bovengrens verruimd naar 9999 op
+// 14-09-2026): artikelnummers 8000 t/m 9999 zijn "houdbaar". Een order is
+// ALLEEN houdbaar (SAME_DAY) als ALLE producten in de order een
+// artikelnummer in dat bereik hebben; zodra er ook maar 1 product buiten dat
+// bereik valt (of het artikelnummer niet numeriek is) wordt de veilige/
+// conservatieve default gebruikt: SAME_DAY_FROZEN_FOOD.
 // De gebruiker kan dit in de UI altijd handmatig overschrijven.
 const HOUDBAAR_ARTIKEL_MIN = 8000;
-const HOUDBAAR_ARTIKEL_MAX = 9000;
+const HOUDBAAR_ARTIKEL_MAX = 9999;
 
 function isHoudbaarArticleCode(code) {
 const n = parseInt(String(code == null ? '' : code).trim(), 10);
