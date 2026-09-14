@@ -16,7 +16,16 @@ const app = express();
 // aan leest Express de X-Forwarded-Proto-header van Railway's proxy en klopt
 // req.protocol weer.
 app.set('trust proxy', 1);
-app.use(express.json());
+// Standaard limiet van express.json() is 100kb - genoeg voor 1 pakbon, maar
+// de pakbon-HTML bevat per pagina een ingebakken base64-vervoerderslogo
+// (5-8kb) plus opmaak/producttabel. Bij het in 1x afdrukken van meerdere
+// geselecteerde pakbonnen (POST naar /api/print-stations/:id/print-pakbon,
+// zie printPakbonnen() in index.html) werd die 100kb al bij een handvol
+// orders overschreden - Express verwierp het verzoek dan stilzwijgend vóór
+// de route-code ooit draaide, wat als generieke "Pakbon versturen naar
+// printer mislukt" bij de gebruiker terechtkwam terwijl 1 pakbon tegelijk
+// wel altijd werkte. 25mb is ruim voldoende voor een hele dagselectie.
+app.use(express.json({ limit: '25mb' }));
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.LIGHTSPEED_API_KEY;
 const API_SECRET = process.env.LIGHTSPEED_API_SECRET;
@@ -1031,7 +1040,9 @@ async function renderHtmlToPdf(html) {
     // networkidle0: de pakbon-HTML laadt JsBarcode via een <script src>
     // (CDN) om de barcode te tekenen - wachten tot dat script binnen is en
     // heeft kunnen draaien, anders is de barcode leeg op de PDF.
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 20000 });
+    // 60s i.p.v. 20s: bij een grote selectie (veel pakbonnen in 1 PDF) kost
+    // het renderen van alle pagina's/logo's meer tijd dan bij 1 pakbon.
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 60000 });
     // Puppeteer v22+ geeft hier een Uint8Array terug i.p.v. een echte Node
     // Buffer - .toString('base64') daarop negeert de encoding stilzwijgend en
     // levert een kommagescheiden lijst getallen op i.p.v. base64 (gevonden
