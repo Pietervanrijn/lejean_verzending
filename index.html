@@ -2205,8 +2205,7 @@ buildPrintDocTypeBlock(s, 'label', 'Label', ['A6', 'A4']) +
 buildPrintDocTypeBlock(s, 'pakbon', 'Pakbon', ['A4', 'A5']) +
 '<div class="print-station-actions">' +
 '<button type="button" class="modal-btn modal-btn-primary" onclick="savePrintStationConfig(\'' + s.id + '\')">Opslaan</button>' +
-'<button type="button" class="medewerker-edit-btn" onclick="downloadPrintAgent(\'' + s.id + '\')">Download print-agent</button>' +
-'<button type="button" class="medewerker-edit-btn" onclick="downloadPrintAgentLauncher(\'' + s.id + '\')" title="Bestand om op te dubbelklikken i.p.v. zelf Command Prompt te gebruiken">Download start-knop (.bat)</button>' +
+'<button type="button" class="medewerker-edit-btn" onclick="downloadPrintAgent(\'' + s.id + '\')" title="Enige download die nodig is - ververst zichzelf bij elke start, dus nooit meer opnieuw downloaden na een wijziging">Download print-agent (.bat)</button>' +
 '<button type="button" class="medewerker-delete-btn" onclick="deletePrintStation(\'' + s.id + '\')">Verwijderen</button>' +
 '</div></div>';
 }).join('');
@@ -2261,12 +2260,12 @@ fetch('/api/settings/print-stations/' + encodeURIComponent(id), { method: 'DELET
 .catch(function() { window.alert('Verwijderen mislukt.'); });
 }
 
+// Sinds 14-09-2026 nog maar 1 download: dit .bat-bestand ververst zichzelf
+// bij elke start (zie buildPrintAgentStartBat in server.js), dus geen apart
+// .js-scriptje meer nodig en nooit meer handmatig opnieuw downloaden na een
+// serverfix of gewijzigde printerkeuze.
 function downloadPrintAgent(id) {
-window.open('/api/settings/print-stations/' + encodeURIComponent(id) + '/agent-script', '_blank');
-}
-
-function downloadPrintAgentLauncher(id) {
-window.open('/api/settings/print-stations/' + encodeURIComponent(id) + '/agent-launcher.bat', '_blank');
+window.open('/api/settings/print-stations/' + encodeURIComponent(id) + '/agent-start.bat', '_blank');
 }
 
 // Gebruikt vanaf overal in de app (Pack & Go zelf, maar ook de knoppen in
