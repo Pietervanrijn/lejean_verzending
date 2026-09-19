@@ -1364,8 +1364,17 @@ next();
 }
 
 async function bulkCreateTrunkrsLabels(orders) {
-var todo = orders.filter(function(o) { return !o._trunkrsLabel; });
-if (!todo.length) { alert('Alle geselecteerde orders hebben al een verzendlabel.'); return { success: 0, failed: 0 }; }
+// Niet-Trunkrs-orders (Chill-Bill/PostNL/Afhalen) apart houden i.p.v. ze
+// gewoon te proberen en als "mislukt" te laten terugkomen (de server
+// weigert ze toch, zie /api/trunkrs/label in server.js) - zo is voor Pieter
+// meteen duidelijk dat dit bewust is overgeslagen, en geen fout is.
+var skippedNonTrunkrs = orders.filter(function(o) { return !o._trunkrsLabel && resolveCarrierKey(o) !== 'trunkrs'; });
+var todo = orders.filter(function(o) { return !o._trunkrsLabel && resolveCarrierKey(o) === 'trunkrs'; });
+if (!todo.length) {
+if (skippedNonTrunkrs.length) alert('Geen Trunkrs-labels aangemaakt: de geselecteerde order(s) zijn geen Trunkrs-zending (Chill-Bill/PostNL/Afhalen) of hebben al een label.');
+else alert('Alle geselecteerde orders hebben al een verzendlabel.');
+return { success: 0, failed: 0 };
+}
 var btn = document.getElementById('printBtn');
 var origText = btn ? btn.innerHTML : '';
 if (btn) { btn.disabled = true; btn.innerHTML = 'Labels aanmaken&hellip;'; }
@@ -1382,11 +1391,12 @@ return data;
 });
 var success = results.filter(function(r){ return r.ok; }).length;
 var failed = results.length - success;
+var skippedSuffix = skippedNonTrunkrs.length ? (' (' + skippedNonTrunkrs.length + ' overgeslagen: geen Trunkrs-zending)') : '';
 if (failed) {
 var failedNums = todo.filter(function(o, i){ return !results[i].ok; }).map(function(o){ return o._ordNummer || o.number; });
-alert(success + ' van ' + todo.length + ' verzendlabels aangemaakt. Mislukt voor: ' + failedNums.join(', ') + '.');
+alert(success + ' van ' + todo.length + ' verzendlabels aangemaakt. Mislukt voor: ' + failedNums.join(', ') + '.' + skippedSuffix);
 } else {
-alert(success + ' verzendlabel' + (success === 1 ? '' : 's') + ' aangemaakt.');
+alert(success + ' verzendlabel' + (success === 1 ? '' : 's') + ' aangemaakt.' + skippedSuffix);
 }
 applyFilter();
 return { success: success, failed: failed };
@@ -1781,7 +1791,13 @@ renderPackGoOrder();
 // twee keer gescand), dan NIET automatisch nog een label aanmaken - de
 // kaart blijft dan gewoon staan met de bestaande waarschuwing, zodat een
 // dubbele Trunkrs-zending altijd een bewuste, handmatige actie blijft.
-if (getPackGoSingleScanMode() && !order._trunkrsLabel) {
+// Extra voorwaarde sinds 19-09-2026 (gemeld door Pieter): alleen automatisch
+// aanmaken als dit ook echt een Trunkrs-zending is - anders werd bij het
+// scannen van een Chill-Bill/PostNL/Afhaal-order toch een Trunkrs-label
+// aangemaakt. Voor de andere vervoerders bestaat nog geen eigen koppeling
+// (zie renderPackGoOrder hieronder voor de waarschuwing in de kaart zelf);
+// de server blokkeert dit ook (zie /api/trunkrs/label in server.js).
+if (getPackGoSingleScanMode() && !order._trunkrsLabel && resolveCarrierKey(order) === 'trunkrs') {
 packGoCreateLabel();
 }
 } catch(e) {
@@ -1797,6 +1813,13 @@ var countryCode = (order.addressShippingCountry && (order.addressShippingCountry
 var flag = getFlagEmoji(countryCode);
 var klant = escapeHtml(order.addressShippingName || order._klant || '-');
 var alreadyLabel = order._trunkrsLabel;
+// Alleen orders die als Trunkrs herkend worden (of handmatig als zodanig
+// gecorrigeerd via "Bewerk order") mogen een Trunkrs-label krijgen - voor
+// de andere vervoerders bestaat nog geen eigen koppeling (gemeld door
+// Pieter 19-09-2026). De knop wordt hieronder uitgeschakeld i.p.v. verborgen,
+// zodat direct zichtbaar is waarom er niets gebeurt bij een klik.
+var carrierKey = resolveCarrierKey(order);
+var isTrunkrsCarrier = carrierKey === 'trunkrs';
 
 var totalQty = 0;
 var rows = products.map(function(p) {
@@ -1812,6 +1835,7 @@ var serviceLabel = autoService === 'SAME_DAY' ? 'Houdbaar' : 'Frozen';
 var serviceClass = autoService === 'SAME_DAY' ? 'houdbaar' : 'frozen';
 
 var alreadyHtml = alreadyLabel ? '<div class="packgo-warning-box">Deze order heeft al een Trunkrs-label (Trunkrs-nr ' + escapeHtml(alreadyLabel.trunkrsNr) + '). Opnieuw aanmaken maakt een nieuwe zending aan bij Trunkrs.</div>' : '';
+var nonTrunkrsHtml = isTrunkrsCarrier ? '' : '<div class="packgo-warning-box">Verzendmethode is ' + escapeHtml((CARRIER_INFO[carrierKey] || CARRIER_INFO.onbekend).naam) + ', geen Trunkrs-zending. Er wordt (nog) geen Trunkrs-label aangemaakt - gebruik "Bewerk order" om de vervoerder te corrigeren als dit toch via Trunkrs moet.</div>';
 
 packGoOverrideOpen = false;
 
@@ -1822,7 +1846,7 @@ resultBox.innerHTML =
 '<div class="packgo-order-num">' + escapeHtml(order._ordNummer || order.number) + ' <span class="packgo-unique-count">(' + products.length + ' ' + (products.length === 1 ? 'uniek artikel' : 'unieke artikelen') + ')</span></div>' +
 '<div class="packgo-head-actions">' +
 '<button type="button" class="packgo-edit-btn" onclick="togglePackGoOverride()" title="Verzendservice aanpassen" aria-label="Verzendservice aanpassen">&#9998;</button>' +
-'<button type="button" class="packgo-create-btn" id="packGoCreateBtn" onclick="packGoCreateLabel()">Label aanmaken</button>' +
+'<button type="button" class="packgo-create-btn" id="packGoCreateBtn" onclick="packGoCreateLabel()"' + (isTrunkrsCarrier ? '' : ' disabled title="Geen Trunkrs-zending - zie waarschuwing hieronder"') + '>Label aanmaken</button>' +
 '</div>' +
 '</div>' +
 '<div class="packgo-head-row2">' +
@@ -1841,6 +1865,7 @@ resultBox.innerHTML =
 '<option value="SAME_DAY_FROZEN_FOOD">Frozen (SAME_DAY_FROZEN_FOOD)</option>' +
 '</select></div>' +
 alreadyHtml +
+nonTrunkrsHtml +
 '<div id="packGoLabelResult"></div>' +
 '</div>';
 
@@ -1865,6 +1890,14 @@ valueEl.className = 'packgo-service-value ' + (service === 'SAME_DAY' ? 'houdbaa
 
 async function packGoCreateLabel() {
 if (!packGoCurrent) return;
+// Extra check naast de uitgeschakelde knop in renderPackGoOrder() en de
+// server-side blokkade in /api/trunkrs/label: voorkomt ook een aanroep via
+// bv. de automatische single-scan-aanroep in loadPackGoOrder hierboven.
+if (resolveCarrierKey(packGoCurrent.order) !== 'trunkrs') {
+var blockedBox = document.getElementById('packGoLabelResult');
+if (blockedBox) blockedBox.innerHTML = '<div class="packgo-error-box">Geen Trunkrs-zending - Trunkrs-label wordt niet aangemaakt.</div>';
+return;
+}
 var btn = document.getElementById('packGoCreateBtn');
 var serviceOverride = packGoOverrideOpen ? document.getElementById('packGoOverrideSelect').value : null;
 btn.disabled = true;

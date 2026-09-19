@@ -225,6 +225,54 @@ if (typeof ov.frozen === 'boolean') merged._frozenOverride = ov.frozen;
 return merged;
 }
 
+// Bepaalt de weergegeven verzendmethode-tekst en of dit een afhaalorder is -
+// zelfde regels als voorheen inline in enrichOrders() hieronder stonden, nu
+// een losse functie zodat /api/trunkrs/label (zie verderop) dezelfde,
+// consistente tekst/afhaal-bepaling kan gebruiken om de vervoerder vast te
+// stellen vóórdat er een Trunkrs-label wordt aangemaakt.
+function deriveShippingMethodAndPickup(order) {
+let shippingMethod = order.shipmentTitle || order.shippingMethod || 'Onbekend';
+const orderStr = JSON.stringify(order);
+const dagMatch = orderStr.match(/"([^"]*[Dd][Aa][Gg][Bb][Ee][Zz][Oo][Rr][Gg][Ii][Nn][Gg][^"]*)"/);
+if (dagMatch) shippingMethod = dagMatch[1];
+const pickupMatch = orderStr.match(/"([^"]*[Aa][Ff][Hh][Aa][Ll][Ee][Nn]\s+[Bb][Ii][Jj]\s+[Ll][Ee][Jj][Ee][Aa][Nn][^"]*)"/);
+if (pickupMatch) shippingMethod = pickupMatch[1];
+const isPickup = !!(order.shipmentIsPickup || /AFHALEN BIJ LEJEAN/i.test(shippingMethod));
+return { shippingMethod: shippingMethod, isPickup: isPickup };
+}
+
+// --- Vervoerder-detectie -------------------------------------------------
+// Zelfde regels als resolveCarrierKey()/detectCarrierKey() in index.html
+// (badge/pakbon/filter), hier bewust herhaald zodat de server dit ook kan
+// controleren vóórdat een Trunkrs-label wordt aangemaakt (zie
+// /api/trunkrs/label hieronder) - anders werd tot 19-09-2026 voor ELKE
+// gescande order een Trunkrs-label aangemaakt, ook als de verzendmethode
+// eigenlijk Chill-Bill, PostNL of Afhalen was (gemeld door Pieter). Bij
+// wijziging van de detectielogica dus op BEIDE plekken aanpassen.
+function isPostNLMethodServer(method) {
+if (!method) return false;
+return /postnl/i.test(method);
+}
+function isTrunkrsMethodServer(method) {
+if (!method) return false;
+if (isPostNLMethodServer(method)) return false;
+if (/[A-Z]{2,}/.test(method)) return false;
+const m = method.match(/(\d{1,2}):(\d{2})/);
+if (!m) return false;
+return parseInt(m[1], 10) >= 17;
+}
+function detectCarrierKeyServer(shipMethod) {
+if (isPostNLMethodServer(shipMethod)) return 'postnl';
+if (/[A-Z]{2,}/.test(shipMethod || '')) return 'chillbill';
+if (isTrunkrsMethodServer(shipMethod)) return 'trunkrs';
+return 'onbekend';
+}
+function resolveCarrierKeyServer(order, shippingMethod, isPickup) {
+if (order && order._carrierOverride) return order._carrierOverride;
+if (isPickup) return 'afhalen';
+return detectCarrierKeyServer(shippingMethod);
+}
+
 const VERZEND_COUNT_FILE = DATA_DIR + '/verzend-count.json';
 function loadVerzendCounts() {
 try { return JSON.parse(fs.readFileSync(VERZEND_COUNT_FILE, 'utf8')); } catch(e) { return {}; }
@@ -550,13 +598,9 @@ const firstName = order.firstname || '';
 const middleName = order.middlename || '';
 const lastName = order.lastname || '';
 const klant = [firstName, middleName, lastName].filter(Boolean).join(' ') || order.email || 'Onbekend';
-let shippingMethod = order.shipmentTitle || order.shippingMethod || 'Onbekend';
-const orderStr = JSON.stringify(order);
-const dagMatch = orderStr.match(/"([^"]*[Dd][Aa][Gg][Bb][Ee][Zz][Oo][Rr][Gg][Ii][Nn][Gg][^"]*)"/);
-if (dagMatch) shippingMethod = dagMatch[1];
-const pickupMatch = orderStr.match(/"([^"]*[Aa][Ff][Hh][Aa][Ll][Ee][Nn]\s+[Bb][Ii][Jj]\s+[Ll][Ee][Jj][Ee][Aa][Nn][^"]*)"/);
-if (pickupMatch) shippingMethod = pickupMatch[1];
-const isPickup = !!(order.shipmentIsPickup || /AFHALEN BIJ LEJEAN/i.test(shippingMethod));
+const shipInfo = deriveShippingMethodAndPickup(order);
+const shippingMethod = shipInfo.shippingMethod;
+const isPickup = shipInfo.isPickup;
 const ordNummer = String(order.number || '').toUpperCase().startsWith('ORD') ? String(order.number) : 'ORD' + order.number;
 // Let op: NIET String(order.number) hier - Lightspeed geeft voor sommige
 // (test)orders een ordernummer terug dat zelf al "ORD" bevat (bv.
@@ -872,6 +916,25 @@ if (!order) return res.status(404).json({ error: 'Order niet gevonden' });
 // zodat een fout adres/verzendmethode ook daadwerkelijk in het bij Trunkrs
 // aangemaakte label terechtkomt - zie applyOrderOverride() hierboven.
 order = applyOrderOverride(order);
+
+// Blokkeert het aanmaken van een Trunkrs-label voor een order die helemaal
+// geen Trunkrs-zending is. Tot 19-09-2026 werd hier voor ELKE order die
+// gescand/aangeboden werd een Trunkrs-label aangemaakt, ook als de
+// verzendmethode eigenlijk Chill-Bill, PostNL of Afhalen was (gemeld door
+// Pieter) - voor die vervoerders bestaat nog geen eigen koppeling, dus dit
+// blokkeert het voorlopig hard i.p.v. per ongeluk een onterechte Trunkrs-
+// zending te boeken. Een expliciete vervoerder-correctie via "Bewerk order"
+// (_carrierOverride, potlood-icoon) gaat hier altijd voor en kan dit dus
+// bewust overrulen als een order toch echt via Trunkrs moet.
+const shipInfoForLabel = deriveShippingMethodAndPickup(order);
+const carrierKeyForLabel = resolveCarrierKeyServer(order, shipInfoForLabel.shippingMethod, shipInfoForLabel.isPickup);
+if (carrierKeyForLabel !== 'trunkrs') {
+return res.status(409).json({
+error: 'Verzendmethode "' + shipInfoForLabel.shippingMethod + '" is geen Trunkrs-zending (herkend als: ' + carrierKeyForLabel + '). Trunkrs-label wordt niet aangemaakt. Gebruik "Bewerk order" om de vervoerder handmatig te corrigeren als dit toch via Trunkrs moet.',
+carrierKey: carrierKeyForLabel,
+shippingMethod: shipInfoForLabel.shippingMethod
+});
+}
 
 // Eigen idempotentie-check, VOORDAT we Trunkrs uberhaupt aanroepen: als we
 // voor deze order al eerder succesvol een label hebben aangemaakt (staat in
