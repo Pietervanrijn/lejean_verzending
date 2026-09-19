@@ -630,12 +630,18 @@ return extra;
 // dan bij "Verzonden" (die alleen stopt met verversen, zie RETENTION_DAYS_
 // VERZONDEN hierboven) is dit op verzoek van Pieter (19-09-2026) een echte
 // verwijdering uit orderStatusStore/trunkrsLabelsStore/orderIdMapStore, zodat
-// deze bestanden niet voor altijd blijven doorgroeien. We verwijderen
-// uitsluitend orders met een bekend annuleringsmoment (geannuleerdAtStore,
-// zowel handmatig als via de Trunkrs-annuleerknop gezet); zonder bekend
-// moment raken we een order bewust niet aan, om nooit per ongeluk een
-// recent geannuleerde order kwijt te raken. Draait 1x bij opstarten en
-// daarna elke 24 uur.
+// deze bestanden niet voor altijd blijven doorgroeien.
+// Orders zonder bekend annuleringsmoment (geannuleerdAtStore) zijn per
+// definitie orders van vóór deze fix - geannuleerdAtStore bestond toen nog
+// niet. Pieter wil deze achterstand ook in één keer opgeruimd hebben
+// (19-09-2026: "graag ook de oudere orders eenmalig verwijderen"), dus die
+// worden hieronder direct verwijderd i.p.v. op hun 30-dagen-termijn te
+// wachten. Omdat vanaf nu élke nieuwe annulering (zowel via de Trunkrs-
+// annuleerknop als een handmatige statuswissel) meteen een moment in
+// geannuleerdAtStore krijgt, is dit pad na deze eenmalige inhaalslag alleen
+// nog relevant voor eventuele toekomstige orders die per ongeluk zonder
+// tijdstip in orderStatusStore belanden. Draait 1x bij opstarten en daarna
+// elke 24 uur.
 const RETENTION_DAYS_GEANNULEERD = 30;
 function cleanupOldGeannuleerdOrders() {
 const cutoffMs = Date.now() - RETENTION_DAYS_GEANNULEERD * 24 * 60 * 60 * 1000;
@@ -643,24 +649,37 @@ let statusChanged = false;
 let labelsChanged = false;
 let idMapChanged = false;
 let timestampsChanged = false;
-Object.keys(geannuleerdAtStore).forEach(function(key) {
-if (orderStatusStore[key] !== 'geannuleerd') {
-// Order staat niet (meer) op geannuleerd - bv. handmatig teruggezet
-// naar een andere tab - het oude annuleringsmoment is dan niet meer
-// relevant.
-delete geannuleerdAtStore[key];
-timestampsChanged = true;
-return;
+const geannuleerdKeys = Object.keys(orderStatusStore).filter(function(k) {
+return orderStatusStore[k] === 'geannuleerd';
+});
+geannuleerdKeys.forEach(function(key) {
+const stampedAt = geannuleerdAtStore[key];
+let shouldDelete;
+let reden;
+if (!stampedAt) {
+shouldDelete = true;
+reden = 'eenmalige opruiming, onbekend annuleringsmoment (van vóór deze fix)';
+} else {
+const ts = new Date(stampedAt).getTime();
+shouldDelete = !isNaN(ts) && ts < cutoffMs;
+reden = 'ouder dan ' + RETENTION_DAYS_GEANNULEERD + ' dagen';
 }
-const ts = new Date(geannuleerdAtStore[key]).getTime();
-if (isNaN(ts) || ts >= cutoffMs) return;
+if (!shouldDelete) return;
 delete orderStatusStore[key];
 statusChanged = true;
 if (trunkrsLabelsStore[key]) { delete trunkrsLabelsStore[key]; labelsChanged = true; }
 if (orderIdMapStore[key]) { delete orderIdMapStore[key]; idMapChanged = true; }
+if (geannuleerdAtStore[key]) { delete geannuleerdAtStore[key]; timestampsChanged = true; }
+console.log('[opruiming] geannuleerde order ' + key + ' definitief verwijderd (' + reden + ').');
+});
+// Eventuele wees-tijdstippen opruimen: order staat niet (meer) op
+// geannuleerd (bv. handmatig teruggezet naar een andere tab), dus het oude
+// annuleringsmoment is niet meer relevant.
+Object.keys(geannuleerdAtStore).forEach(function(key) {
+if (orderStatusStore[key] !== 'geannuleerd') {
 delete geannuleerdAtStore[key];
 timestampsChanged = true;
-console.log('[opruiming] geannuleerde order ' + key + ' definitief verwijderd (ouder dan ' + RETENTION_DAYS_GEANNULEERD + ' dagen).');
+}
 });
 if (statusChanged) saveOrderStatus(orderStatusStore);
 if (labelsChanged) saveTrunkrsLabels(trunkrsLabelsStore);
