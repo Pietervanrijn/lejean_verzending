@@ -192,6 +192,25 @@ let orderStatusStore = loadOrderStatus();
 if (migrateOrdPrefixedKeys(printStatusStore, 'print-status')) savePrintStatus(printStatusStore);
 if (migrateOrdPrefixedKeys(orderStatusStore, 'order-status')) saveOrderStatus(orderStatusStore);
 
+// De "Genegeerd"-functie (bestellingen op Inkomend lokaal verbergen, met een
+// eigen tabblad om ze weer terug te zetten) is op verzoek van Pieter
+// (19-09-2026) vervangen door de "Afgehaald"-scanfunctie - er is dus geen
+// tabblad meer waar een 'genegeerd'-order nog zichtbaar/terug te zetten is.
+// Orders die op het moment van deze wijziging nog als 'genegeerd' stonden,
+// zetten we daarom eenmalig terug naar 'inkomend', zodat ze niet stilletjes
+// voor altijd onvindbaar blijven. Draait bewust bij elke opstart (niet alleen
+// eenmalig): volledig ongevaarlijk om vaker te draaien, want status
+// 'genegeerd' kan hierna nergens meer opnieuw ontstaan (geaccepteerd door
+// geen enkel endpoint meer, zie allowedStatuses bij /api/order-status).
+function migrateGenegeerdStatusToInkomend(store) {
+var changed = false;
+Object.keys(store).forEach(function(key) {
+if (store[key] === 'genegeerd') { store[key] = 'inkomend'; changed = true; }
+});
+return changed;
+}
+if (migrateGenegeerdStatusToInkomend(orderStatusStore)) saveOrderStatus(orderStatusStore);
+
 // Handmatige correcties op verzendmethode/adres vanuit het "Bewerk order"-
 // potlood-icoon in het Inkomend-tabblad (op verzoek van Pieter, 2026-09-10).
 // Bewust ALLEEN een lokale override in deze app - er wordt nooit iets
@@ -894,12 +913,15 @@ res.json({ ok: true, printStatus: printStatusStore });
 
 app.post('/api/order-status', (req, res) => {
 const { orderNumbers, status } = req.body || {};
-// "genegeerd" = lokaal verborgen via de rode "Geselecteerde bestellingen
-// verwijderen"-knop op Inkomende orders (op verzoek van Pieter, 2026-08-30).
 // Dit is puur een lokale statuswissel in deze app - er wordt nooit iets bij
 // Lightspeed of de vervoerder aangepast of verwijderd.
-const allowedStatuses = ['inkomend', 'label', 'verzonden', 'geannuleerd', 'genegeerd'];
-if (!Array.isArray(orderNumbers) || !allowedStatuses.includes(status)) return res.status(400).json({ error: 'orderNumbers en een geldige status (inkomend, label, verzonden, geannuleerd, genegeerd) zijn verplicht' });
+// "genegeerd" bestaat hier bewust niet meer bij: die functie (bestellingen
+// lokaal verbergen/terugzetten via een eigen tabblad) is op verzoek van
+// Pieter (19-09-2026) vervangen door de "Afgehaald"-scanfunctie - zie
+// migrateGenegeerdStatusToInkomend() hierboven voor het opruimen van nog
+// bestaande 'genegeerd'-orders van vóór deze wijziging.
+const allowedStatuses = ['inkomend', 'label', 'verzonden', 'geannuleerd'];
+if (!Array.isArray(orderNumbers) || !allowedStatuses.includes(status)) return res.status(400).json({ error: 'orderNumbers en een geldige status (inkomend, label, verzonden, geannuleerd) zijn verplicht' });
 const nowIso = new Date().toISOString();
 orderNumbers.forEach(n => {
 const key = bareOrderNumberKey(n);
@@ -991,6 +1013,9 @@ res.json({ results });
 // gegenereerd, zet dit de Lightspeed-shipment toch op "shipped" - net als bij
 // het aanmaken van een Trunkrs-label. Geen trackingCode: die heeft Chill-Bill
 // niet. Mag per order falen zonder de andere orders in de batch te blokkeren.
+// Sinds 19-09-2026 ook de aanroep achter het "Afgehaald"-tabblad (scannen van
+// een afhaal-order aan de balie markeert 'm hiermee als verzonden in
+// Lightspeed) - altijd met precies 1 orderId in die aanroep.
 app.post('/api/orders/mark-shipped', async (req, res) => {
 const { orderIds } = req.body || {};
 if (!Array.isArray(orderIds) || !orderIds.length) return res.status(400).json({ error: 'orderIds verplicht' });

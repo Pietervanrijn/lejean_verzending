@@ -154,6 +154,54 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .packgo-edit-btn:hover{border-color:#33401f;color:#33401f}
 .packgo-unique-count{font-size:13px;font-weight:500;color:#888;margin-left:4px}
 .packgo-qty-badge{background:#33401f;color:#fff;font-weight:800;font-size:13px;border-radius:8px;padding:2px 10px;display:inline-block;min-width:24px;text-align:center}
+
+/* "Afgehaald"-tabblad (scannen van afhaal-orders aan de balie, 19-09-2026):
+   vervangt het oude "Genegeerd"-tabblad. Bewust een eigen, duidelijk ander
+   kleurenpalet dan Pack & Go (blauw i.p.v. oranje/olijfgroen) plus een eigen
+   achtergrondtint voor het hele tabblad - op verzoek van Pieter, zodat
+   medewerkers in één oogopslag zien dat dit een ander scherm is dan Pack & Go
+   en de twee niet door elkaar halen. */
+.afgehaald-page{background:#eaf2fc;border-radius:14px;padding:20px}
+.afgehaald-topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.afgehaald-topbar-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.afgehaald-topbar-label{font-size:14px;font-weight:700;color:#0d3b66}
+.afgehaald-info-link{background:none;border:none;color:#1a73e8;font-size:13px;font-weight:600;cursor:pointer;padding:0}
+.afgehaald-info-link:hover{text-decoration:underline}
+.afgehaald-banner{font-size:13px;font-weight:700;color:#0d3b66;background:#d5e6fb;border-radius:20px;padding:6px 16px;display:flex;align-items:center;gap:8px}
+.afgehaald-toggle{position:relative;display:inline-block;width:42px;height:24px;cursor:pointer;flex-shrink:0}
+.afgehaald-toggle input{position:absolute;opacity:0;inset:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:1}
+.afgehaald-toggle-track{position:absolute;inset:0;background:#ccc;border-radius:12px;transition:background .2s;pointer-events:none}
+.afgehaald-toggle-thumb{position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3);pointer-events:none}
+.afgehaald-toggle input:checked + .afgehaald-toggle-track{background:#1a73e8}
+.afgehaald-toggle input:checked + .afgehaald-toggle-track + .afgehaald-toggle-thumb{transform:translateX(18px)}
+.afgehaald-scan-box{background:#fff;border-radius:12px;padding:24px 30px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.afgehaald-scan-label{display:block;font-size:13px;font-weight:700;color:#555;margin-bottom:10px}
+.afgehaald-searchbar{display:flex;align-items:stretch}
+.afgehaald-scan-input{width:100%;font-size:20px;padding:14px 18px;border-radius:10px 0 0 10px;border:2px solid #e0e0e0;outline:none;font-family:inherit}
+.afgehaald-scan-input:focus{border-color:#1a73e8}
+.afgehaald-search-btn{background:#0d3b66;color:#fff;border:none;border-radius:0 10px 10px 0;padding:0 22px;font-size:17px;cursor:pointer;transition:background .2s}
+.afgehaald-search-btn:hover{background:#0a2c4d}
+.afgehaald-scan-error{color:#c62828;font-size:13px;font-weight:600;margin-top:10px;min-height:18px}
+.afgehaald-card{background:#fff;border-radius:12px;padding:24px 30px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.afgehaald-card-head{margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid #eaf2fc}
+.afgehaald-order-num{font-size:22px;font-weight:800;color:#0d3b66}
+.afgehaald-klant{color:#1a73e8;font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px;margin-top:8px}
+.afgehaald-items{margin:16px 0;padding:0;list-style:none}
+.afgehaald-items li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #eaf2fc;font-size:14px;color:#333}
+.afgehaald-items li span.afgehaald-qty{background:#0d3b66;color:#fff;font-weight:800;font-size:13px;border-radius:8px;padding:2px 10px;flex-shrink:0}
+.afgehaald-confirm-btn{background:#1a73e8;color:#fff;border:none;padding:11px 26px;border-radius:24px;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap}
+.afgehaald-confirm-btn:hover:not(:disabled){background:#3b8af0}
+.afgehaald-confirm-btn:disabled{opacity:.5;cursor:not-allowed}
+.afgehaald-success-box{background:#e8f5e9;border-radius:10px;padding:18px 20px;margin-top:16px;font-weight:600;color:#2e7d32}
+.afgehaald-warning-box{background:#fff3e0;border-radius:10px;padding:14px 18px;margin-top:12px;font-size:13px;color:#e65100}
+.afgehaald-error-box{background:#ffebee;color:#c62828;border-radius:10px;padding:14px 18px;font-weight:600}
+.afgehaald-empty{text-align:center;padding:64px 20px 56px}
+.afgehaald-empty-icon{margin-bottom:18px;display:flex;justify-content:center;font-size:48px}
+.afgehaald-empty h3{font-size:19px;color:#0d3b66;margin-bottom:10px}
+.afgehaald-empty p{font-size:14px;line-height:1.6;color:#777;max-width:440px;margin:0 auto}
+.afgehaald-empty a{color:#1a73e8;font-weight:600;text-decoration:none;cursor:pointer}
+.afgehaald-empty a:hover{text-decoration:underline}
+
 .label-toolbar{background:#fff;border-radius:12px;padding:16px 24px;margin-bottom:20px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-wrap:wrap}
 .label-search-input{background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:6px;padding:8px 18px;font-size:14px;color:#333;outline:none;min-width:240px;transition:border-color .2s;font-family:inherit}
 .label-search-input:focus{border-color:#f0821e}
@@ -285,7 +333,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <button type="button" class="tab-btn" id="tab-label" onclick="switchTab('label')">Gecreëerde labels</button>
 <button type="button" class="tab-btn" id="tab-verzonden" onclick="switchTab('verzonden')">Verzonden</button>
 <button type="button" class="tab-btn" id="tab-geannuleerd" onclick="switchTab('geannuleerd')">Geannuleerd</button>
-<button type="button" class="tab-btn" id="tab-genegeerd" onclick="switchTab('genegeerd')">Genegeerd</button>
+<button type="button" class="tab-btn" id="tab-afgehaald" onclick="switchTab('afgehaald')">Afgehaald</button>
 <button type="button" class="tab-btn" id="tab-packgo" onclick="switchTab('packgo')">Pack &amp; Go</button>
 </div>
 <div class="stats" id="statsBox">
@@ -310,7 +358,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="print-dropdown-item" data-mode="beide" onclick="setPrintMode('beide')"><span>Pakbonnen + verzendinformatie (Chill-Bill)</span><span class="pdi-check">&#10003;</span></div>
 </div>
 </div>
-<button type="button" class="delete-selected-btn" id="deleteSelectedBtn" onclick="deleteSelectedOrders()" disabled title="Verbergen uit Inkomende orders (past niets aan in Lightspeed)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Geselecteerde bestellingen verwijderen</button>
 </div>
 <div class="toolbar-row toolbar-filters-row">
 <select class="filter-select" id="methodFilter" onchange="applyFilter()">
@@ -394,10 +441,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <button type="button" class="print-btn" onclick="refreshTrunkrsStatuses()">Statussen verversen</button>
 <span class="filter-count" id="verzondenFilterCount"></span>
 </div>
-<div class="toolbar" id="genegeerdToolbarBox" style="display:none">
-<button type="button" class="print-btn" id="restoreSelectedBtn" onclick="restoreSelectedOrders()" disabled>Terugzetten naar Inkomende orders (<span id="restoreSelCount">0</span>)</button>
-<span class="filter-count">Genegeerde bestellingen zijn alleen in deze app verborgen; ze staan nog gewoon in Lightspeed.</span>
-</div>
 <div id="errorBox"></div>
 <div id="ordersContainer">
 <div class="empty"><div class="empty-icon">&#9203;</div><p>Orders worden geladen...</p></div>
@@ -443,6 +486,44 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <p style="font-size:13.5px;color:#555;line-height:1.55;margin-bottom:10px"><b>Standaardmodus (2 scans):</b> de eerste scan (of het intypen van het ordernummer) toont de order, zodat je de verzendservice nog kunt controleren of aanpassen (potloodje). Scan dezelfde barcode nogmaals, of klik op &ldquo;Label aanmaken&rdquo;, om te bevestigen.</p>
 <p style="font-size:13.5px;color:#555;line-height:1.55;margin-bottom:18px"><b>Single scan:</b> met &eacute;&eacute;n scan wordt de order gezocht &eacute;n meteen het verzendlabel aangemaakt &mdash; geen tussenstap nodig. Heeft de order al een label, dan wordt uit voorzorg niet automatisch nog een label aangemaakt en zie je de kaart alsnog ter controle.</p>
 <button type="button" class="packgo-login-btn" onclick="closePackGoInfoModal()">Sluiten</button>
+</div>
+</div>
+<!-- "Afgehaald"-tabblad: scanscherm voor afhaal-orders, vervangt het oude
+     "Genegeerd"-tabblad (19-09-2026). Bewust géén PIN-inlog zoals Pack & Go -
+     er wordt hier niets lokaal bijgehouden (alleen de Lightspeed-status
+     wordt bijgewerkt), dus is er ook niets om aan een medewerker te
+     koppelen. -->
+<div id="afgehaaldContainer" style="display:none">
+<div class="afgehaald-page">
+<div class="afgehaald-topbar">
+<div class="afgehaald-topbar-left">
+<label class="afgehaald-toggle" title="Single scan">
+<input type="checkbox" id="afgehaaldSingleScanToggle">
+<span class="afgehaald-toggle-track"></span>
+<span class="afgehaald-toggle-thumb"></span>
+</label>
+<span class="afgehaald-topbar-label">Single scan</span>
+<button type="button" class="afgehaald-info-link" onclick="openAfgehaaldInfoModal()">(Wat is single scan?)</button>
+</div>
+<div class="afgehaald-banner">&#128715; Afhaal-balie &ndash; markeert bestellingen als verzonden in Lightspeed</div>
+</div>
+<div class="afgehaald-scan-box">
+<label for="afgehaaldScanInput" class="afgehaald-scan-label">Scan de barcode op de pakbon, of typ het ordernummer</label>
+<div class="afgehaald-searchbar">
+<input type="text" id="afgehaaldScanInput" class="afgehaald-scan-input" placeholder="Scan hier, of typ een ordernummer en druk op Enter&hellip;" autocomplete="off">
+<button type="button" class="afgehaald-search-btn" onclick="afgehaaldManualSubmit()" title="Zoeken" aria-label="Zoeken">&#128269;</button>
+</div>
+<div id="afgehaaldScanError" class="afgehaald-scan-error"></div>
+</div>
+<div id="afgehaaldResult"></div>
+</div>
+</div>
+<div class="modal-overlay" id="afgehaaldInfoModal">
+<div class="modal-panel" style="max-width:440px">
+<h3 style="margin-bottom:10px;color:#0d3b66;font-size:16px">Wat is single scan?</h3>
+<p style="font-size:13.5px;color:#555;line-height:1.55;margin-bottom:10px"><b>Standaardmodus (2 scans):</b> de eerste scan (of het intypen van het ordernummer) toont de order, zodat je kunt controleren of dit de juiste bestelling is. Scan dezelfde barcode nogmaals, of klik op &ldquo;Markeer als afgehaald&rdquo;, om te bevestigen.</p>
+<p style="font-size:13.5px;color:#555;line-height:1.55;margin-bottom:18px"><b>Single scan:</b> met &eacute;&eacute;n scan wordt de order gezocht &eacute;n meteen als afgehaald gemarkeerd &mdash; geen tussenstap nodig.</p>
+<button type="button" class="afgehaald-confirm-btn" onclick="closeAfgehaaldInfoModal()">Sluiten</button>
 </div>
 </div>
 <div class="modal-overlay" id="medewerkerLoginModal">
@@ -566,35 +647,42 @@ var verzondenDateTo = '';
 // invullen en moeten geescaped worden voordat ze via innerHTML de pagina
 // ingaan, anders kan iemand met een vreemd teken in bijv. zijn naam
 // JavaScript laten draaien in het scherm van wie de bestellingen bekijkt.
-var TAB_LABELS = { inkomend: 'Orders klaar voor verzending', label: 'Labels aangemaakt', verzonden: 'Verzonden orders', geannuleerd: 'Geannuleerde orders', genegeerd: 'Genegeerde orders' };
-var TAB_BADGE_DISPLAY = { inkomend: 'flex', label: 'none', verzonden: 'none', geannuleerd: 'none', genegeerd: 'none' };
+var TAB_LABELS = { inkomend: 'Orders klaar voor verzending', label: 'Labels aangemaakt', verzonden: 'Verzonden orders', geannuleerd: 'Geannuleerde orders' };
+var TAB_BADGE_DISPLAY = { inkomend: 'flex', label: 'none', verzonden: 'none', geannuleerd: 'none' };
 
 function switchTab(tab) {
 currentTab = tab;
-['inkomend','label','verzonden','geannuleerd','genegeerd','packgo'].forEach(function(t) {
+['inkomend','label','verzonden','geannuleerd','afgehaald','packgo'].forEach(function(t) {
 var btn = document.getElementById('tab-' + t);
 if (btn) btn.classList.toggle('active', t === tab);
 });
 var isPackGo = (tab === 'packgo');
+var isAfgehaald = (tab === 'afgehaald');
 var statsBox = document.getElementById('statsBox');
 var ordersContainer = document.getElementById('ordersContainer');
 var packGoContainer = document.getElementById('packGoContainer');
-if (statsBox) statsBox.style.display = isPackGo ? 'none' : 'flex';
-if (ordersContainer) ordersContainer.style.display = isPackGo ? 'none' : '';
+var afgehaaldContainer = document.getElementById('afgehaaldContainer');
+if (statsBox) statsBox.style.display = (isPackGo || isAfgehaald) ? 'none' : 'flex';
+if (ordersContainer) ordersContainer.style.display = (isPackGo || isAfgehaald) ? 'none' : '';
 if (packGoContainer) packGoContainer.style.display = isPackGo ? '' : 'none';
+if (afgehaaldContainer) afgehaaldContainer.style.display = isAfgehaald ? '' : 'none';
 var toolbar = document.getElementById('toolbarBox');
 if (toolbar) toolbar.style.display = (tab === 'inkomend') ? 'flex' : 'none';
 var labelToolbar = document.getElementById('labelToolbarBox');
 if (labelToolbar) labelToolbar.style.display = (tab === 'label') ? 'flex' : 'none';
 var verzondenToolbar = document.getElementById('verzondenToolbarBox');
 if (verzondenToolbar) verzondenToolbar.style.display = (tab === 'verzonden') ? 'flex' : 'none';
-var genegeerdToolbar = document.getElementById('genegeerdToolbarBox');
-if (genegeerdToolbar) genegeerdToolbar.style.display = (tab === 'genegeerd') ? 'flex' : 'none';
 if (tab === 'label' || tab === 'verzonden') refreshTrunkrsStatuses();
 if (isPackGo) {
 updatePackGoGateVisibility();
 var input = document.getElementById('packGoScanInput');
 if (input && getPackGoNaam()) setTimeout(function() { input.focus(); }, 0);
+return;
+}
+if (isAfgehaald) {
+if (!afgehaaldCurrent) afgehaaldRenderEmptyState();
+var afgehaaldInput = document.getElementById('afgehaaldScanInput');
+if (afgehaaldInput) setTimeout(function() { afgehaaldInput.focus(); }, 0);
 return;
 }
 var titleEl = document.getElementById('statsTitle');
@@ -779,10 +867,6 @@ var __selCountEl = document.getElementById('selCount'); if (__selCountEl) __selC
 document.getElementById('printBtn').disabled = checked.length === 0;
 var __caretBtn = document.getElementById('printCaretBtn'); if (__caretBtn) __caretBtn.disabled = checked.length === 0;
 var __selectAllCb = document.getElementById('selectAllCheckbox'); if (__selectAllCb) { __selectAllCb.checked = allBoxes.length > 0 && checked.length === allBoxes.length; }
-var __delBtn = document.getElementById('deleteSelectedBtn'); if (__delBtn) __delBtn.disabled = checked.length === 0;
-var __restoreBtn = document.getElementById('restoreSelectedBtn'); var __restoreCountEl = document.getElementById('restoreSelCount');
-if (__restoreBtn) __restoreBtn.disabled = checked.length === 0;
-if (__restoreCountEl) __restoreCountEl.textContent = checked.length;
 var __labelPrintBtn = document.getElementById('labelPrintBtn'); if (__labelPrintBtn) __labelPrintBtn.disabled = checked.length === 0;
 var __labelPrintCaretBtn = document.getElementById('labelPrintCaretBtn'); if (__labelPrintCaretBtn) __labelPrintCaretBtn.disabled = checked.length === 0;
 var __labelSelCountEl = document.getElementById('labelSelCount'); if (__labelSelCountEl) __labelSelCountEl.textContent = checked.length;
@@ -794,50 +878,167 @@ boxes.forEach(function(b){ b.checked = cb.checked; });
 updateSelection();
 }
 
-// "Geselecteerde bestellingen verwijderen" (Inkomende orders) - op verzoek van
-// Pieter (2026-08-30) verbergt dit de order alleen in deze app (status
-// "genegeerd"), en past NIETS aan bij Lightspeed of de vervoerder. Terugzetten
-// kan via het tabblad "Genegeerd".
-async function deleteSelectedOrders() {
-var checked = Array.from(document.querySelectorAll('.order-checkbox:checked'));
-if (!checked.length) return;
-var nums = checked.map(function(cb){ return cb.getAttribute('data-num'); });
-var aantal = nums.length;
-if (!confirm('Weet je zeker dat je ' + aantal + ' bestelling' + (aantal === 1 ? '' : 'en') + ' wilt verbergen uit Inkomende orders?\n\nDit past niets aan in Lightspeed of bij de vervoerder - de bestelling(en) worden alleen in deze app verborgen, en kunnen via het tabblad "Genegeerd" weer worden teruggezet.')) return;
-var btn = document.getElementById('deleteSelectedBtn');
-if (btn) btn.disabled = true;
-try {
-var res = await fetch('/api/order-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderNumbers: nums.map(bareOrderNummer), status: 'genegeerd' }) });
-if (!res.ok) { var d = await res.json().catch(function(){ return {}; }); throw new Error(d.error || ('Server error: ' + res.status)); }
-nums.forEach(function(n) {
-var o = allOrders.find(function(x){ return String(x._ordNummer || x.number) === String(n); });
-if (o) o._orderStatus = 'genegeerd';
+// ============================================================================
+// "Afgehaald"-tabblad: scannen van afhaal-orders aan de balie, waarna de
+// order in Lightspeed op "shipped" wordt gezet. Vervangt het oude
+// "Genegeerd"-tabblad (op verzoek van Pieter, 19-09-2026). Bewust géén eigen
+// lokale status hier (geen orderStatusStore-wijziging, geen "Verzonden"-tab
+// in deze app) - dit endpoint werkt alleen de Lightspeed-shipment bij, exact
+// zoals de bestaande "Verzendinformatie-export"-knop op Inkomend dat ook al
+// doet voor Chill-Bill/DAGBEZORGING-orders (zie /api/orders/mark-shipped in
+// server.js). Interactiepatroon (single scan-schakelaar, 2-scans-bevestiging)
+// is bewust hetzelfde als Pack & Go, maar met een eigen blauw kleurenpalet
+// (zie .afgehaald-* CSS) zodat medewerkers de twee schermen niet verwarren.
+// ============================================================================
+var afgehaaldCurrent = null; // { order, products, verwerkt }
+
+function getAfgehaaldSingleScanMode() {
+try { return localStorage.getItem('lj_afgehaald_single_scan') === '1'; } catch(e) { return false; }
+}
+function setAfgehaaldSingleScanMode(on) {
+try { localStorage.setItem('lj_afgehaald_single_scan', on ? '1' : '0'); } catch(e) {}
+}
+function initAfgehaaldSingleScanToggle() {
+var cb = document.getElementById('afgehaaldSingleScanToggle');
+if (!cb) return;
+cb.checked = getAfgehaaldSingleScanMode();
+cb.addEventListener('change', function() { setAfgehaaldSingleScanMode(cb.checked); });
+}
+function openAfgehaaldInfoModal() {
+var overlay = document.getElementById('afgehaaldInfoModal');
+if (overlay) overlay.classList.add('open');
+}
+function closeAfgehaaldInfoModal() {
+var overlay = document.getElementById('afgehaaldInfoModal');
+if (overlay) overlay.classList.remove('open');
+}
+
+function initAfgehaaldScanner() {
+var input = document.getElementById('afgehaaldScanInput');
+if (!input) return;
+input.addEventListener('keydown', function(e) {
+if (e.key === 'Enter') {
+e.preventDefault();
+afgehaaldManualSubmit();
+}
 });
-applyFilter();
+}
+
+function afgehaaldManualSubmit() {
+var input = document.getElementById('afgehaaldScanInput');
+if (!input) return;
+var value = input.value.trim();
+input.value = '';
+if (value) handleAfgehaaldScan(value);
+}
+
+function afgehaaldRenderEmptyState() {
+var resultBox = document.getElementById('afgehaaldResult');
+if (!resultBox) return;
+resultBox.innerHTML =
+'<div class="afgehaald-empty">' +
+'<div class="afgehaald-empty-icon">&#128715;</div>' +
+'<h3>Scan een afhaal-order</h3>' +
+'<p>Scan de streepjescode op de pakbon, of typ het ordernummer hierboven in het zoekveld. Dit werkt alleen voor bestellingen met verzendmethode "Afhalen" die nog bij <a onclick="switchTab(\'inkomend\')">Inkomende orders</a> staan.</p>' +
+'</div>';
+}
+
+// Zelfde matching als Pack & Go (findOrderByScannedId, parsePakbonBarcode
+// hierboven), maar dan met een eigen foutafhandeling: hier moet de order
+// ook daadwerkelijk een afhaal-order zijn en nog als "inkomend" openstaan.
+function handleAfgehaaldScan(rawValue) {
+var errorBox = document.getElementById('afgehaaldScanError');
+errorBox.textContent = '';
+var idStr = parsePakbonBarcode(rawValue);
+var order = findOrderByScannedId(idStr);
+if (!order) {
+errorBox.textContent = 'Geen order gevonden voor gescande code "' + rawValue + '".';
+return;
+}
+if (resolveCarrierKey(order) !== 'afhalen') {
+errorBox.textContent = 'Order ' + (order._ordNummer || order.number) + ' is geen afhaal-order (verzendmethode: ' + ((CARRIER_INFO[resolveCarrierKey(order)] || CARRIER_INFO.onbekend).naam) + ') - kan hier niet worden afgemeld.';
+return;
+}
+if ((order._orderStatus || 'inkomend') !== 'inkomend') {
+errorBox.textContent = 'Order ' + (order._ordNummer || order.number) + ' staat niet meer bij Inkomend (status: ' + order._orderStatus + ') - waarschijnlijk al afgehandeld.';
+return;
+}
+
+// Standaardmodus (Single scan uit): een TWEEDE scan van dezelfde, nog niet
+// bevestigde order geldt als bevestiging - zelfde patroon als Pack & Go.
+if (!getAfgehaaldSingleScanMode() && afgehaaldCurrent && !afgehaaldCurrent.verwerkt &&
+String(afgehaaldCurrent.order.id) === String(order.id)) {
+markAfgehaald();
+return;
+}
+
+loadAfgehaaldOrder(order);
+}
+
+async function loadAfgehaaldOrder(order) {
+var resultBox = document.getElementById('afgehaaldResult');
+resultBox.innerHTML = '<div class="afgehaald-card"><p>Producten laden&hellip;</p></div>';
+try {
+var res = await fetch('/api/orders/' + order.id + '/products');
+var data = await res.json();
+var products = data.products || [];
+afgehaaldCurrent = { order: order, products: products, verwerkt: false };
+renderAfgehaaldOrder();
+// Single scan: 1 scan zoekt de order EN markeert 'm meteen als afgehaald,
+// zonder tussenstap.
+if (getAfgehaaldSingleScanMode()) markAfgehaald();
 } catch(e) {
-alert('Verbergen mislukt: ' + e.message);
-if (btn) btn.disabled = document.querySelectorAll('.order-checkbox:checked').length === 0;
+resultBox.innerHTML = '<div class="afgehaald-card"><div class="afgehaald-error-box">Kon producten niet ophalen: ' + escapeHtml(e.message) + '</div></div>';
 }
 }
 
-// Terugzetten vanuit het tabblad "Genegeerd" naar Inkomende orders.
-async function restoreSelectedOrders() {
-var checked = Array.from(document.querySelectorAll('.order-checkbox:checked'));
-if (!checked.length) return;
-var nums = checked.map(function(cb){ return cb.getAttribute('data-num'); });
-var btn = document.getElementById('restoreSelectedBtn');
-if (btn) btn.disabled = true;
+function renderAfgehaaldOrder() {
+var resultBox = document.getElementById('afgehaaldResult');
+if (!afgehaaldCurrent) { afgehaaldRenderEmptyState(); return; }
+var order = afgehaaldCurrent.order, products = afgehaaldCurrent.products;
+var klant = escapeHtml(order.addressShippingName || order._klant || '-');
+var rows = products.map(function(p) {
+var title = escapeHtml((p.productTitle || p.title || p.fulltitle || p.name || '-') + (p.variantTitle ? ' | ' + p.variantTitle : ''));
+var qty = parseInt(p.quantityOrdered || p.quantity || p.amount || 1, 10) || 1;
+return '<li><span>' + title + '</span><span class="afgehaald-qty">' + qty + '</span></li>';
+}).join('');
+var verwerkt = afgehaaldCurrent.verwerkt;
+
+resultBox.innerHTML =
+'<div class="afgehaald-card">' +
+'<div class="afgehaald-card-head">' +
+'<div class="afgehaald-order-num">' + escapeHtml(order._ordNummer || order.number) + '</div>' +
+'<div class="afgehaald-klant">' + klant + '</div>' +
+'</div>' +
+'<ul class="afgehaald-items">' + rows + '</ul>' +
+'<button type="button" class="afgehaald-confirm-btn" id="afgehaaldConfirmBtn" onclick="markAfgehaald()"' + (verwerkt ? ' disabled' : '') + '>' + (verwerkt ? 'Al afgemeld' : 'Markeer als afgehaald') + '</button>' +
+'<div id="afgehaaldMarkResult"></div>' +
+'</div>';
+}
+
+async function markAfgehaald() {
+if (!afgehaaldCurrent || afgehaaldCurrent.verwerkt) return;
+var btn = document.getElementById('afgehaaldConfirmBtn');
+var markResultBox = document.getElementById('afgehaaldMarkResult');
+if (btn) { btn.disabled = true; btn.textContent = 'Bezig&hellip;'; }
+if (markResultBox) markResultBox.innerHTML = '';
 try {
-var res = await fetch('/api/order-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderNumbers: nums.map(bareOrderNummer), status: 'inkomend' }) });
-if (!res.ok) { var d = await res.json().catch(function(){ return {}; }); throw new Error(d.error || ('Server error: ' + res.status)); }
-nums.forEach(function(n) {
-var o = allOrders.find(function(x){ return String(x._ordNummer || x.number) === String(n); });
-if (o) o._orderStatus = 'inkomend';
+var res = await fetch('/api/orders/mark-shipped', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ orderIds: [afgehaaldCurrent.order.id] })
 });
-applyFilter();
+var data = await res.json();
+var result = (data.results || [])[0];
+if (!result || !result.ok) throw new Error((result && result.error) || 'Onbekende fout');
+afgehaaldCurrent.verwerkt = true;
+var thisOrderId = afgehaaldCurrent.order.id;
+allOrders = allOrders.filter(function(o){ return String(o.id) !== String(thisOrderId); });
+if (markResultBox) markResultBox.innerHTML = '<div class="afgehaald-success-box">Gemarkeerd als afgehaald &mdash; status in Lightspeed bijgewerkt.</div>';
+if (btn) { btn.disabled = true; btn.textContent = 'Al afgemeld'; }
 } catch(e) {
-alert('Terugzetten mislukt: ' + e.message);
-if (btn) btn.disabled = document.querySelectorAll('.order-checkbox:checked').length === 0;
+if (markResultBox) markResultBox.innerHTML = '<div class="afgehaald-error-box">Markeren als afgehaald mislukt: ' + escapeHtml(e.message) + '</div>';
+if (btn) { btn.disabled = false; btn.textContent = 'Markeer als afgehaald'; }
 }
 }
 
@@ -2964,6 +3165,9 @@ initPackGoScanner();
 initPackGoSingleScanToggle();
 packGoRenderEmptyState();
 updatePackGoGateVisibility();
+initAfgehaaldScanner();
+initAfgehaaldSingleScanToggle();
+afgehaaldRenderEmptyState();
 restorePersistedToolbarSettings();
 loadPrintStations();
 detectLocalPrintStation();
