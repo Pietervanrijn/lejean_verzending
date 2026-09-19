@@ -62,6 +62,19 @@ const TRUNKRS_WAREHOUSE_SCAN_OR_LATER_CODES = [
 // om aparte aandacht i.p.v. stilzwijgend als "verzonden" te tellen. Zulke
 // orders blijven in "Gecreëerde labels" staan, met hun eigen statusbadge.
 
+// Echte eindstatussen: hierna verandert een zending bij Trunkrs niet meer,
+// dus heeft doorpollen (zie /api/trunkrs/refresh-statuses verderop) geen zin
+// meer. Zonder deze uitsluiting blijft ELKE ooit aangemaakte Trunkrs-zending
+// voor altijd meegenomen bij "Statussen verversen" (elke tabwissel naar
+// "Gecreëerde labels"/"Verzonden", en de knop), wat die actie na verloop van
+// maanden steeds trager maakt - gemeld door Pieter (19-09-2026: het duurt
+// lang voordat de status van de zending wordt bijgewerkt).
+const TRUNKRS_TERMINAL_STATE_CODES = [
+  'SHIPMENT_DELIVERED',
+  'SHIPMENT_DELIVERED_TO_NEIGHBOR',
+  'SHIPMENT_NOT_DELIVERED'
+];
+
 // --- Pack & Go: aparte PIN-beveiliging (wie heeft een label geprint?) ----
 // Op verzoek van Pieter (2026-08-29): geen volledige gebruikersaccounts,
 // alleen een lichte PIN-check specifiek voor het Pack & Go-scherm, zodat
@@ -546,9 +559,25 @@ const trackedNumbers = new Set([
 ...Object.keys(orderStatusStore).filter(n => orderStatusStore[n] && orderStatusStore[n] !== 'inkomend'),
 ...Object.keys(trunkrsLabelsStore)
 ]);
+// Orders die al klaar zijn (verzonden/geannuleerd) niet voor altijd blijven
+// meeslepen: zonder grens groeit deze lijst - en dus het aantal individuele
+// Lightspeed-opzoekingen hierbeneden - iedere maand verder door, wat
+// /api/orders steeds trager en zwaarder maakt (gemeld door Pieter
+// 19-09-2026: "Verzonden"-tab bevat te veel data). Ruim boven de 14 dagen
+// die de langste vaste periode is die de "Verzonden"-tab zelf aanbiedt, dus
+// dit blijft onopgemerkt tenzij iemand bewust een "Aangepaste periode" verder
+// terug in de tijd opzoekt. "label"-orders (nog niet verzonden, dus nog
+// actie nodig in Pack & Go) worden hier bewust NIET op ouderdom uitgesloten.
+const RETENTION_DAYS_AFGEROND = 30;
+const retentionCutoffMs = Date.now() - RETENTION_DAYS_AFGEROND * 24 * 60 * 60 * 1000;
 const extra = [];
 for (const num of trackedNumbers) {
 if (present.has(num)) continue;
+const statusForNum = orderStatusStore[num];
+const labelForNum = trunkrsLabelsStore[num];
+if ((statusForNum === 'verzonden' || statusForNum === 'geannuleerd') && labelForNum && labelForNum.createdAt) {
+if (new Date(labelForNum.createdAt).getTime() < retentionCutoffMs) continue;
+}
 const id = (trunkrsLabelsStore[num] && trunkrsLabelsStore[num].orderId) || orderIdMapStore[num];
 if (!id) {
 // Kan gebeuren voor orders die al 'label'/'verzonden' waren VOORDAT deze
@@ -1910,7 +1939,13 @@ app.post('/api/trunkrs/refresh-statuses', async (req, res) => {
 if (!TRUNKRS_API_KEY) return res.status(503).json({ error: 'TRUNKRS_API_KEY is niet ingesteld (Railway env var).' });
 const keys = Object.keys(trunkrsLabelsStore).filter(function(k) {
 const entry = trunkrsLabelsStore[k];
-return entry && entry.trunkrsNr && !entry.cancelledAt;
+if (!entry || !entry.trunkrsNr || entry.cancelledAt) return false;
+// Al in een eindstatus (afgeleverd/niet afgeleverd) - die verandert niet
+// meer, dus niet opnieuw opvragen bij Trunkrs (zie TRUNKRS_TERMINAL_STATE_CODES
+// hierboven voor waarom dit nodig is).
+const code = entry.state && entry.state.code;
+if (code && TRUNKRS_TERMINAL_STATE_CODES.indexOf(code) !== -1) return false;
+return true;
 });
 let orderStatusChanged = false;
 try {
