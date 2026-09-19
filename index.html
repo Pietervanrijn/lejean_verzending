@@ -381,8 +381,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <select class="filter-select" id="verzondenDateSelect" onchange="setVerzondenDateRange(this.value)">
 <option value="1">Vandaag</option>
 <option value="3">Afgelopen 3 dagen</option>
-<option value="7">Afgelopen 7 dagen</option>
-<option value="14" selected>Afgelopen 14 dagen</option>
+<option value="7" selected>Afgelopen 7 dagen</option>
+<option value="14">Afgelopen 14 dagen</option>
 <option value="aangepast">Aangepaste periode</option>
 </select>
 <div class="date-range-custom" id="verzondenDateCustomBox">
@@ -554,7 +554,10 @@ var labelDateFrom = '';
 var labelDateTo = '';
 var verzondenSearchQuery = '';
 var verzondenSortMode = 'datum_desc';
-var verzondenDateRange = '14';
+// Standaard 7 dagen i.p.v. 14 (gemeld door Pieter 19-09-2026: overzichtelijker
+// en minder data om te tonen/verwerken) - via de select hieronder nog steeds
+// gewoon te verruimen naar 14 dagen of een aangepaste periode.
+var verzondenDateRange = '7';
 var verzondenDateFrom = '';
 var verzondenDateTo = '';
 // Let op: escapeHtml() wordt verderop in dit bestand gedefinieerd (bij
