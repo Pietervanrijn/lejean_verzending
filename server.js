@@ -331,6 +331,25 @@ let orderIdMapStore = loadOrderIdMap();
 if (migrateOrdPrefixedKeys(trunkrsLabelsStore, 'trunkrs-labels')) saveTrunkrsLabels(trunkrsLabelsStore);
 if (migrateOrdPrefixedKeys(orderIdMapStore, 'order-id-map')) saveOrderIdMap(orderIdMapStore);
 
+// Onthoudt WANNEER een order op "geannuleerd" is gezet (ordernummer -> ISO-
+// tijdstip). Nodig voor de opruimtaak hieronder (cleanupOldGeannuleerdOrders,
+// op verzoek van Pieter, 2026-09-19: geannuleerde orders na 30 dagen
+// definitief verwijderen). trunkrsLabelsStore's eigen "cancelledAt" volstaat
+// hiervoor NIET: sinds de Trunkrs-blokkade voor niet-Trunkrs-zendingen heeft
+// een geannuleerde Chill-Bill/PostNL/Afhalen-order vaak helemaal geen
+// trunkrsLabelsStore-entry, en ook een handmatige statuswissel via het
+// "/api/order-status"-endpoint raakt trunkrsLabelsStore niet aan. Deze store
+// dekt dus beide gevallen.
+const GEANNULEERD_AT_FILE = DATA_DIR + '/geannuleerd-at.json';
+function loadGeannuleerdAt() {
+try { return JSON.parse(fs.readFileSync(GEANNULEERD_AT_FILE, 'utf8')); } catch(e) { return {}; }
+}
+function saveGeannuleerdAt(data) {
+try { fs.writeFileSync(GEANNULEERD_AT_FILE, JSON.stringify(data)); } catch(e) { console.error('saveGeannuleerdAt error:', e.message); }
+}
+let geannuleerdAtStore = loadGeannuleerdAt();
+if (migrateOrdPrefixedKeys(geannuleerdAtStore, 'geannuleerd-at')) saveGeannuleerdAt(geannuleerdAtStore);
+
 // Medewerkers (naam -> PIN) voor de Pack & Go PIN-check, beheerd via het
 // instellingenpaneel (rechter zijbalk) i.p.v. een Railway env var die elke
 // keer handmatig aangepast moet worden. Backwards compatible: als er nog
@@ -559,23 +578,32 @@ const trackedNumbers = new Set([
 ...Object.keys(orderStatusStore).filter(n => orderStatusStore[n] && orderStatusStore[n] !== 'inkomend'),
 ...Object.keys(trunkrsLabelsStore)
 ]);
-// Orders die al klaar zijn (verzonden/geannuleerd) niet voor altijd blijven
-// meeslepen: zonder grens groeit deze lijst - en dus het aantal individuele
-// Lightspeed-opzoekingen hierbeneden - iedere maand verder door, wat
-// /api/orders steeds trager en zwaarder maakt (gemeld door Pieter
-// 19-09-2026: "Verzonden"-tab bevat te veel data). Ruim boven de 14 dagen
-// die de langste vaste periode is die de "Verzonden"-tab zelf aanbiedt, dus
-// dit blijft onopgemerkt tenzij iemand bewust een "Aangepaste periode" verder
-// terug in de tijd opzoekt. "label"-orders (nog niet verzonden, dus nog
-// actie nodig in Pack & Go) worden hier bewust NIET op ouderdom uitgesloten.
-const RETENTION_DAYS_AFGEROND = 30;
-const retentionCutoffMs = Date.now() - RETENTION_DAYS_AFGEROND * 24 * 60 * 60 * 1000;
+// Oude VERZONDEN orders niet voor altijd blijven meeslepen: zonder grens
+// groeit deze lijst - en dus het aantal individuele Lightspeed-opzoekingen
+// hierbeneden - iedere maand verder door, wat /api/orders steeds trager en
+// zwaarder maakt (gemeld door Pieter 19-09-2026: "Verzonden"-tab bevat te
+// veel data). Op verzoek van Pieter (19-09-2026) verlaagd naar 14 dagen -
+// gelijk aan de langste vaste periode die de "Verzonden"-tab zelf aanbiedt
+// (een "Aangepaste periode" verder terug in de tijd toont dan dus niets
+// meer voor deze orders, maar die is voor dit doeleinde ook niet meer
+// bedoeld sinds deze orders sowieso niet langer worden opgehaald).
+// BELANGRIJK: dit NIET ook op 'geannuleerd' toepassen (fout gemaakt in de
+// eerste versie van deze fix, 19-09-2026) - "Geannuleerd" heeft geen eigen
+// datumfilter zoals "Verzonden" om terug te vallen op, dus elke oudere
+// geannuleerde order werd daardoor stilletjes helemaal onvindbaar (Pieter
+// meldde: "geen orders meer zichtbaar in de tab Geannuleerd"). Geannuleerde
+// orders krijgen in plaats daarvan hun eigen, definitieve opruiming na 30
+// dagen - zie cleanupOldGeannuleerdOrders() verderop. "label"-orders (nog
+// niet verzonden, dus nog actie nodig in Pack & Go) worden hier sowieso al
+// bewust NIET op ouderdom uitgesloten.
+const RETENTION_DAYS_VERZONDEN = 14;
+const retentionCutoffMs = Date.now() - RETENTION_DAYS_VERZONDEN * 24 * 60 * 60 * 1000;
 const extra = [];
 for (const num of trackedNumbers) {
 if (present.has(num)) continue;
 const statusForNum = orderStatusStore[num];
 const labelForNum = trunkrsLabelsStore[num];
-if ((statusForNum === 'verzonden' || statusForNum === 'geannuleerd') && labelForNum && labelForNum.createdAt) {
+if (statusForNum === 'verzonden' && labelForNum && labelForNum.createdAt) {
 if (new Date(labelForNum.createdAt).getTime() < retentionCutoffMs) continue;
 }
 const id = (trunkrsLabelsStore[num] && trunkrsLabelsStore[num].orderId) || orderIdMapStore[num];
@@ -597,6 +625,69 @@ console.error('fetchLocallyTrackedMissingOrders error voor order ' + num + ' (id
 }
 return extra;
 }
+
+// Ruimt geannuleerde orders 30 dagen na hun annulering definitief op: anders
+// dan bij "Verzonden" (die alleen stopt met verversen, zie RETENTION_DAYS_
+// VERZONDEN hierboven) is dit op verzoek van Pieter (19-09-2026) een echte
+// verwijdering uit orderStatusStore/trunkrsLabelsStore/orderIdMapStore, zodat
+// deze bestanden niet voor altijd blijven doorgroeien.
+// Orders zonder bekend annuleringsmoment (geannuleerdAtStore) zijn per
+// definitie orders van vóór deze fix - geannuleerdAtStore bestond toen nog
+// niet. Pieter wil deze achterstand ook in één keer opgeruimd hebben
+// (19-09-2026: "graag ook de oudere orders eenmalig verwijderen"), dus die
+// worden hieronder direct verwijderd i.p.v. op hun 30-dagen-termijn te
+// wachten. Omdat vanaf nu élke nieuwe annulering (zowel via de Trunkrs-
+// annuleerknop als een handmatige statuswissel) meteen een moment in
+// geannuleerdAtStore krijgt, is dit pad na deze eenmalige inhaalslag alleen
+// nog relevant voor eventuele toekomstige orders die per ongeluk zonder
+// tijdstip in orderStatusStore belanden. Draait 1x bij opstarten en daarna
+// elke 24 uur.
+const RETENTION_DAYS_GEANNULEERD = 30;
+function cleanupOldGeannuleerdOrders() {
+const cutoffMs = Date.now() - RETENTION_DAYS_GEANNULEERD * 24 * 60 * 60 * 1000;
+let statusChanged = false;
+let labelsChanged = false;
+let idMapChanged = false;
+let timestampsChanged = false;
+const geannuleerdKeys = Object.keys(orderStatusStore).filter(function(k) {
+return orderStatusStore[k] === 'geannuleerd';
+});
+geannuleerdKeys.forEach(function(key) {
+const stampedAt = geannuleerdAtStore[key];
+let shouldDelete;
+let reden;
+if (!stampedAt) {
+shouldDelete = true;
+reden = 'eenmalige opruiming, onbekend annuleringsmoment (van vóór deze fix)';
+} else {
+const ts = new Date(stampedAt).getTime();
+shouldDelete = !isNaN(ts) && ts < cutoffMs;
+reden = 'ouder dan ' + RETENTION_DAYS_GEANNULEERD + ' dagen';
+}
+if (!shouldDelete) return;
+delete orderStatusStore[key];
+statusChanged = true;
+if (trunkrsLabelsStore[key]) { delete trunkrsLabelsStore[key]; labelsChanged = true; }
+if (orderIdMapStore[key]) { delete orderIdMapStore[key]; idMapChanged = true; }
+if (geannuleerdAtStore[key]) { delete geannuleerdAtStore[key]; timestampsChanged = true; }
+console.log('[opruiming] geannuleerde order ' + key + ' definitief verwijderd (' + reden + ').');
+});
+// Eventuele wees-tijdstippen opruimen: order staat niet (meer) op
+// geannuleerd (bv. handmatig teruggezet naar een andere tab), dus het oude
+// annuleringsmoment is niet meer relevant.
+Object.keys(geannuleerdAtStore).forEach(function(key) {
+if (orderStatusStore[key] !== 'geannuleerd') {
+delete geannuleerdAtStore[key];
+timestampsChanged = true;
+}
+});
+if (statusChanged) saveOrderStatus(orderStatusStore);
+if (labelsChanged) saveTrunkrsLabels(trunkrsLabelsStore);
+if (idMapChanged) saveOrderIdMap(orderIdMapStore);
+if (timestampsChanged) saveGeannuleerdAt(geannuleerdAtStore);
+}
+cleanupOldGeannuleerdOrders();
+setInterval(cleanupOldGeannuleerdOrders, 24 * 60 * 60 * 1000);
 
 async function fetchOrderProductsSummary(orderId) {
 if (orderProductsSummaryCache.has(orderId)) return orderProductsSummaryCache.get(orderId);
@@ -809,10 +900,18 @@ const { orderNumbers, status } = req.body || {};
 // Lightspeed of de vervoerder aangepast of verwijderd.
 const allowedStatuses = ['inkomend', 'label', 'verzonden', 'geannuleerd', 'genegeerd'];
 if (!Array.isArray(orderNumbers) || !allowedStatuses.includes(status)) return res.status(400).json({ error: 'orderNumbers en een geldige status (inkomend, label, verzonden, geannuleerd, genegeerd) zijn verplicht' });
+const nowIso = new Date().toISOString();
 orderNumbers.forEach(n => {
-orderStatusStore[bareOrderNumberKey(n)] = status;
+const key = bareOrderNumberKey(n);
+orderStatusStore[key] = status;
+// Annuleringsmoment vastleggen (zie geannuleerdAtStore hierboven) zodat
+// ook handmatig geannuleerde orders na 30 dagen definitief opgeruimd
+// kunnen worden - niet alleen orders die via de Trunkrs-annuleerknop
+// geannuleerd zijn.
+if (status === 'geannuleerd') geannuleerdAtStore[key] = nowIso;
 });
 saveOrderStatus(orderStatusStore);
+if (status === 'geannuleerd') saveGeannuleerdAt(geannuleerdAtStore);
 res.json({ ok: true, orderStatus: orderStatusStore });
 });
 
@@ -1919,7 +2018,9 @@ await axios.delete(TRUNKRS_BASE_URL + '/shipments/' + entry.trunkrsNr, { headers
 entry.cancelledAt = new Date().toISOString();
 saveTrunkrsLabels(trunkrsLabelsStore);
 orderStatusStore[key] = 'geannuleerd';
+geannuleerdAtStore[key] = entry.cancelledAt;
 saveOrderStatus(orderStatusStore);
+saveGeannuleerdAt(geannuleerdAtStore);
 res.json({ ok: true });
 } catch(e) {
 const detail = e.response ? JSON.stringify(e.response.data) : e.message;
