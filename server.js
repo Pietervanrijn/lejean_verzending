@@ -559,15 +559,20 @@ const trackedNumbers = new Set([
 ...Object.keys(orderStatusStore).filter(n => orderStatusStore[n] && orderStatusStore[n] !== 'inkomend'),
 ...Object.keys(trunkrsLabelsStore)
 ]);
-// Orders die al klaar zijn (verzonden/geannuleerd) niet voor altijd blijven
-// meeslepen: zonder grens groeit deze lijst - en dus het aantal individuele
-// Lightspeed-opzoekingen hierbeneden - iedere maand verder door, wat
-// /api/orders steeds trager en zwaarder maakt (gemeld door Pieter
-// 19-09-2026: "Verzonden"-tab bevat te veel data). Ruim boven de 14 dagen
-// die de langste vaste periode is die de "Verzonden"-tab zelf aanbiedt, dus
-// dit blijft onopgemerkt tenzij iemand bewust een "Aangepaste periode" verder
-// terug in de tijd opzoekt. "label"-orders (nog niet verzonden, dus nog
-// actie nodig in Pack & Go) worden hier bewust NIET op ouderdom uitgesloten.
+// Oude VERZONDEN orders niet voor altijd blijven meeslepen: zonder grens
+// groeit deze lijst - en dus het aantal individuele Lightspeed-opzoekingen
+// hierbeneden - iedere maand verder door, wat /api/orders steeds trager en
+// zwaarder maakt (gemeld door Pieter 19-09-2026: "Verzonden"-tab bevat te
+// veel data). Ruim boven de 14 dagen die de langste vaste periode is die de
+// "Verzonden"-tab zelf aanbiedt, dus dit blijft onopgemerkt tenzij iemand
+// bewust een "Aangepaste periode" verder terug in de tijd opzoekt.
+// BELANGRIJK: dit NIET ook op 'geannuleerd' toepassen (fout gemaakt in de
+// eerste versie van deze fix, 19-09-2026) - "Geannuleerd" heeft geen eigen
+// datumfilter zoals "Verzonden" om terug te vallen op, dus elke oudere
+// geannuleerde order werd daardoor stilletjes helemaal onvindbaar (Pieter
+// meldde: "geen orders meer zichtbaar in de tab Geannuleerd"). "label"-orders
+// (nog niet verzonden, dus nog actie nodig in Pack & Go) worden hier
+// sowieso al bewust NIET op ouderdom uitgesloten.
 const RETENTION_DAYS_AFGEROND = 30;
 const retentionCutoffMs = Date.now() - RETENTION_DAYS_AFGEROND * 24 * 60 * 60 * 1000;
 const extra = [];
@@ -575,7 +580,7 @@ for (const num of trackedNumbers) {
 if (present.has(num)) continue;
 const statusForNum = orderStatusStore[num];
 const labelForNum = trunkrsLabelsStore[num];
-if ((statusForNum === 'verzonden' || statusForNum === 'geannuleerd') && labelForNum && labelForNum.createdAt) {
+if (statusForNum === 'verzonden' && labelForNum && labelForNum.createdAt) {
 if (new Date(labelForNum.createdAt).getTime() < retentionCutoffMs) continue;
 }
 const id = (trunkrsLabelsStore[num] && trunkrsLabelsStore[num].orderId) || orderIdMapStore[num];
