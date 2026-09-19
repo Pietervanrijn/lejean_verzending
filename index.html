@@ -1185,6 +1185,21 @@ if (isPickup) return 'afhalen';
 return detectCarrierKey(order && order._shippingMethod);
 }
 
+// Ordernummer in de tabel (Inkomend/Geannuleerd/Verzonden/Labels) is een
+// <a>-tag met handcursor, maar had nooit een click-actie - klikken deed dus
+// letterlijk niets, terwijl het er wel klikbaar uitzag (gemeld door Pieter,
+// ORD81269, 2026-09-19). URL-patroon bevestigd door Pieter zelf (adresbalk
+// van een geopende order in de Lightspeed-backoffice):
+// https://lejean.webshopapp.com/admin/orders/<order-id>. Let op: dat is het
+// interne Lightspeed order-ID (numeriek, o.id/hetzelfde ID als in alle
+// /api/orders/... aanroepen) - niet het weergegeven ordernummer (bv.
+// "ORD81269"/o.number), die twee zijn verschillende velden.
+var LIGHTSPEED_ADMIN_ORDER_URL = 'https://lejean.webshopapp.com/admin/orders/';
+function openLightspeedOrder(orderId) {
+if (!orderId) return;
+window.open(LIGHTSPEED_ADMIN_ORDER_URL + encodeURIComponent(orderId), '_blank', 'noopener');
+}
+
 // productLabelOverride: als er al een preciezere naam bekend is (bv. het
 // daadwerkelijk geboekte Trunkrs-product "Trunkrs Same Day Delivery" i.p.v.
 // alleen de ruwe verzendmethode-tekst), gebruik die als subtekst.
@@ -1251,7 +1266,7 @@ var printBadge = '<button type="button" class="geprint-badge geprint-' + printSt
 
 var statusLabel = currentTab === 'geannuleerd' ? 'Geannuleerd' : (currentTab === 'verzonden' ? 'Verzonden' : 'Wacht op verzending');
 var bewerkKolomHtml = showBewerkKolom ? '<td><button type="button" class="' + (o._hasOverride ? 'bewerk-order-btn bewerk-order-btn-active' : 'bewerk-order-btn') + '" onclick="openBewerkOrderModal(\'' + ordNummerSafe + '\')" title="' + (o._hasOverride ? 'Aangepast - klik om te bewerken' : 'Order bewerken (verzendmethode/verzender/adres/frozen)') + '">&#9998;</button></td>' : '';
-return '<tr><td><input type="checkbox" class="order-checkbox" data-id="' + idSafe + '" data-num="' + ordNummerSafe + '" onchange="updateSelection()"></td><td><div class="shop-status-icon">&#10003;</div></td><td><span class="status-text">' + escapeHtml(statusLabel) + '</span></td><td><a class="order-num-link" href="#">' + ordNummerSafe + '</a><div class="order-date">' + dateSafe + '</div></td><td><div class="' + (hasShipWarning ? "ship-method-wrap ship-wadden-warning" : "ship-method-wrap") + '">' + shipMethodBadgeHtml(o) + shipWarningBadgeHtml + '</div></td><td><div class="inhoud-items">' + itemLabel + '</div>' + (qtyText ? '<div class="inhoud-detail">' + qtyText + '</div>' : '') + (valText ? '<div class="inhoud-detail">' + valText + '</div>' : '') + '</td><td><div class="klant-naam">' + (flag ? flag : '') + klantSafe + '</div>' + (email ? '<div class="klant-email">' + emailSafe + '</div>' : '') + ((postcode||city||countryCode) ? '<div class="klant-adres">' + adresSafe + '</div>' : '') + '</td><td>' + printBadge + '</td>' + bewerkKolomHtml + '</tr>';
+return '<tr><td><input type="checkbox" class="order-checkbox" data-id="' + idSafe + '" data-num="' + ordNummerSafe + '" onchange="updateSelection()"></td><td><div class="shop-status-icon">&#10003;</div></td><td><span class="status-text">' + escapeHtml(statusLabel) + '</span></td><td><a class="order-num-link" href="#" onclick="openLightspeedOrder(\'' + idSafe + '\');return false;" title="Openen in Lightspeed">' + ordNummerSafe + '</a><div class="order-date">' + dateSafe + '</div></td><td><div class="' + (hasShipWarning ? "ship-method-wrap ship-wadden-warning" : "ship-method-wrap") + '">' + shipMethodBadgeHtml(o) + shipWarningBadgeHtml + '</div></td><td><div class="inhoud-items">' + itemLabel + '</div>' + (qtyText ? '<div class="inhoud-detail">' + qtyText + '</div>' : '') + (valText ? '<div class="inhoud-detail">' + valText + '</div>' : '') + '</td><td><div class="klant-naam">' + (flag ? flag : '') + klantSafe + '</div>' + (email ? '<div class="klant-email">' + emailSafe + '</div>' : '') + ((postcode||city||countryCode) ? '<div class="klant-adres">' + adresSafe + '</div>' : '') + '</td><td>' + printBadge + '</td>' + bewerkKolomHtml + '</tr>';
 }).join('');
 c.innerHTML = '<div class="orders-table-wrap"><table class="orders-table"><thead><tr><th><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onchange="toggleSelectAll(this)" title="Alles selecteren"></th><th>SHOP STATUS</th><th>STATUS</th><th>ORDER</th><th>VERZENDMETHODE</th><th>INHOUD VAN DE BESTELLING</th><th>KLANT</th><th>GEPRINT</th>' + (showBewerkKolom ? '<th></th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
@@ -2803,10 +2818,11 @@ var postcode = o.addressShippingZipcode || o.addressBillingZipcode || '';
 var trackUrl = trunkrsTrackingUrl(tl.trunkrsNr, postcode);
 var trackHtml = tl.trunkrsNr ? (trackUrl ? '<a class="tracking-link" href="' + trackUrl + '" target="_blank" rel="noopener">' + escapeHtml(tl.trunkrsNr) + '</a>' : escapeHtml(tl.trunkrsNr)) : '-';
 var datumLabel = escapeHtml(formatLabelDateTime(tl.createdAt));
+var idSafe = escapeHtml(o.id);
 return '<tr>' +
-'<td><input type="checkbox" class="order-checkbox" data-id="' + escapeHtml(o.id) + '" data-num="' + ordNummer + '" onchange="updateSelection()"></td>' +
+'<td><input type="checkbox" class="order-checkbox" data-id="' + idSafe + '" data-num="' + ordNummer + '" onchange="updateSelection()"></td>' +
 '<td><span class="zending-status-badge ' + zst.cls + '">' + (zst.icon ? ZST_GEPRINT_ICON : '') + escapeHtml(zst.label) + '</span></td>' +
-'<td><a class="order-num-link" href="#">' + ordNummer + '</a></td>' +
+'<td><a class="order-num-link" href="#" onclick="openLightspeedOrder(\'' + idSafe + '\');return false;" title="Openen in Lightspeed">' + ordNummer + '</a></td>' +
 '<td><div class="klant-naam">' + (flag || '') + klant + '</div>' + (email ? '<div class="klant-email">' + email + '</div>' : '') + '</td>' +
 '<td>' + shipMethodBadgeHtml(o, serviceLabel) + '</td>' +
 '<td><div class="klant-adres">' + (flag || '') + countryTitle + '</div></td>' +
@@ -2843,10 +2859,11 @@ var trackUrl = trunkrsTrackingUrl(tl.trunkrsNr, postcode);
 var trackHtml = tl.trunkrsNr ? (trackUrl ? '<a class="tracking-link" href="' + trackUrl + '" target="_blank" rel="noopener">' + escapeHtml(tl.trunkrsNr) + '</a>' : escapeHtml(tl.trunkrsNr)) : '-';
 var datumLabel = escapeHtml(formatLabelDateTime(tl.createdAt));
 var printedBy = tl.printedBy ? '<span class="printed-by">' + escapeHtml(tl.printedBy) + '</span>' : '<span class="printed-by niet-geprint">Nog niet geprint</span>';
+var idSafe = escapeHtml(o.id);
 return '<tr>' +
-'<td><input type="checkbox" class="order-checkbox" data-id="' + escapeHtml(o.id) + '" data-num="' + ordNummer + '" onchange="updateSelection()"></td>' +
+'<td><input type="checkbox" class="order-checkbox" data-id="' + idSafe + '" data-num="' + ordNummer + '" onchange="updateSelection()"></td>' +
 '<td><span class="zending-status-badge ' + zst.cls + '">' + (zst.icon ? ZST_GEPRINT_ICON : '') + escapeHtml(zst.label) + '</span></td>' +
-'<td><a class="order-num-link" href="#">' + ordNummer + '</a></td>' +
+'<td><a class="order-num-link" href="#" onclick="openLightspeedOrder(\'' + idSafe + '\');return false;" title="Openen in Lightspeed">' + ordNummer + '</a></td>' +
 '<td><div class="klant-naam">' + (flag || '') + klant + '</div>' + (email ? '<div class="klant-email">' + email + '</div>' : '') + '</td>' +
 '<td><div class="ship-method-wrap">' + shipMethodBadgeHtml(o, serviceLabel) + '</div></td>' +
 '<td><div class="klant-adres">' + (flag || '') + countryTitle + '</div></td>' +
