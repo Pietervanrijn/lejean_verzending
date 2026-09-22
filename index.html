@@ -2996,14 +2996,13 @@ return '<tr>' +
 '<td><div class="klant-adres">' + (flag || '') + countryTitle + '</div></td>' +
 '<td>' + trackHtml + '</td>' +
 '<td>' + datumLabel + '</td>' +
-'<td>Nee</td>' +
 '<td>' + printedBy + '</td>' +
 '<td><button type="button" class="eye-btn" title="Labeldetails bekijken" onclick="openLabelDetail(\'' + ordNummer + '\')">&#128065;</button></td>' +
 '</tr>';
 }).join('');
 c.innerHTML = '<div class="orders-table-wrap"><table class="orders-table"><thead><tr>' +
 '<th><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onchange="toggleSelectAll(this)" title="Alles selecteren"></th>' +
-'<th>ZENDING STATUS</th><th>ORDERNUMMER</th><th>NAAM</th><th>VERZENDMETHODE</th><th>LAND</th><th>TRACKING NUMMER</th><th>DATUM LABEL</th><th>IN OPHAALRAPPORT</th><th>GEPRINT DOOR</th><th></th>' +
+'<th>ZENDING STATUS</th><th>ORDERNUMMER</th><th>NAAM</th><th>VERZENDMETHODE</th><th>LAND</th><th>TRACKING NUMMER</th><th>DATUM LABEL</th><th>GEPRINT DOOR</th><th></th>' +
 '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
