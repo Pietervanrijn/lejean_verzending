@@ -452,6 +452,9 @@ blijft in plaats van meteen 2 volledige lijsten onder elkaar te tonen
 <span>t/m</span>
 <input type="date" id="verzondenDateToInput" onchange="setVerzondenDateTo(this.value)">
 </div>
+<select class="filter-select" id="verzondenStatusFilter" onchange="setVerzondenStatusFilter(this.value)">
+<option value="">Alle zendingstatussen</option>
+</select>
 <input type="text" class="label-search-input" id="verzondenSearchInput" placeholder="Zoek naar zendingen (order, klant, tracking)&hellip;" oninput="applyVerzondenSearch(this.value)">
 <button type="button" class="print-btn" onclick="refreshTrunkrsStatuses()">Statussen verversen</button>
 <span class="filter-count" id="verzondenFilterCount"></span>
@@ -661,6 +664,7 @@ var labelDateRange = '14';
 var labelDateFrom = '';
 var labelDateTo = '';
 var verzondenSearchQuery = '';
+var verzondenStatusFilter = '';
 var verzondenSortMode = 'datum_desc';
 // Standaard 7 dagen i.p.v. 14 (gemeld door Pieter 19-09-2026: overzichtelijker
 // en minder data om te tonen/verwerken) - via de select hieronder nog steeds
@@ -743,6 +747,7 @@ allOrders.sort(function(a, b) { var na = parseFloat(a._ordNummer || a.number || 
 allMethods = computeSortedMethods(allOrders);
 populateFilter(allMethods);
 populateExtraFilterOptions();
+populateVerzondenStatusFilter();
 applyFilter();
 if (checkedNums.length) {
 document.querySelectorAll('.order-checkbox').forEach(function(cb) {
@@ -2752,6 +2757,7 @@ if (labels[key]) o._trunkrsLabel = labels[key];
 // een volledige paginaherlading.
 if (statuses[key]) o._orderStatus = statuses[key];
 });
+populateVerzondenStatusFilter();
 if (currentTab === 'label') refreshLabelView();
 if (currentTab === 'verzonden') refreshVerzondenView();
 }).catch(function(e) { console.error('refreshTrunkrsStatuses:', e.message); });
@@ -2850,6 +2856,9 @@ var VERZONDEN_SORT_COMPARATORS = LABEL_SORT_COMPARATORS;
 function getVerzondenFilteredOrders() {
 var list = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'verzonden'; });
 list = list.filter(function(o){ var tl = o._trunkrsLabel; var t = tl && tl.createdAt ? new Date(tl.createdAt).getTime() : 0; return dateRangeMatches(t, verzondenDateRange, verzondenDateFrom, verzondenDateTo); });
+if (verzondenStatusFilter) {
+list = list.filter(function(o){ var tl = o._trunkrsLabel || {}; return formatZendingStatus(tl.state && tl.state.code).label === verzondenStatusFilter; });
+}
 if (verzondenSearchQuery) {
 var q = verzondenSearchQuery.toLowerCase();
 list = list.filter(function(o){
@@ -2861,7 +2870,40 @@ return hay.indexOf(q) !== -1;
 return list.slice().sort(VERZONDEN_SORT_COMPARATORS[verzondenSortMode] || VERZONDEN_SORT_COMPARATORS.datum_desc);
 }
 
+// Vult de statusfilter met alle zendingstatussen die daadwerkelijk voorkomen
+// onder de huidige "Verzonden"-orders (ongeacht de eigen zoek-/datumfilter -
+// zelfde opzet als computeSortedMethods()/populateFilter() voor de
+// Inkomend-verzendmethode hierboven), zodat de lijst geen opties toont die
+// toch niets zouden opleveren en niet vanzelf krimpt zodra je al aan het
+// filteren bent.
+function computeSortedZendingStatuses(orders) {
+var seen = {};
+var labels = [];
+orders.forEach(function(o) {
+if ((o._orderStatus || 'inkomend') !== 'verzonden') return;
+var tl = o._trunkrsLabel || {};
+var label = formatZendingStatus(tl.state && tl.state.code).label;
+if (!seen[label]) { seen[label] = true; labels.push(label); }
+});
+return labels.sort(function(a, b) { return a.localeCompare(b, 'nl'); });
+}
+
+function populateVerzondenStatusFilter() {
+var sel = document.getElementById('verzondenStatusFilter');
+if (!sel) return;
+var cur = sel.value;
+sel.innerHTML = '<option value="">Alle zendingstatussen</option>';
+computeSortedZendingStatuses(allOrders).forEach(function(label) {
+var opt = document.createElement('option');
+opt.value = label;
+opt.textContent = label;
+if (label === cur) opt.selected = true;
+sel.appendChild(opt);
+});
+}
+
 function applyVerzondenSearch(value) { verzondenSearchQuery = value || ''; refreshVerzondenView(); }
+function setVerzondenStatusFilter(value) { verzondenStatusFilter = value || ''; refreshVerzondenView(); }
 function setVerzondenSort(value) { verzondenSortMode = value; refreshVerzondenView(); }
 function setVerzondenDateRange(value) {
 verzondenDateRange = value;
@@ -2877,7 +2919,7 @@ var filtered = getVerzondenFilteredOrders();
 var total = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === 'verzonden'; }).length;
 document.getElementById('count').textContent = total;
 var fc = document.getElementById('verzondenFilterCount');
-if (fc) fc.textContent = (verzondenSearchQuery || verzondenDateRange !== 'aangepast' || verzondenDateFrom || verzondenDateTo) ? filtered.length + ' van ' + total + ' verzonden orders' : total + ' verzonden orders totaal';
+if (fc) fc.textContent = (verzondenSearchQuery || verzondenStatusFilter || verzondenDateRange !== 'aangepast' || verzondenDateFrom || verzondenDateTo) ? filtered.length + ' van ' + total + ' verzonden orders' : total + ' verzonden orders totaal';
 preserveCheckedSelection(function() { renderVerzondenOrders(filtered); });
 updateSelection();
 }
