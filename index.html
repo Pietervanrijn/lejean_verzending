@@ -873,10 +873,26 @@ if (currentTab === 'verzonden') {
 refreshVerzondenView();
 return;
 }
-var selectedMethod = document.getElementById('methodFilter').value;
-var selectedPrint = document.getElementById('printFilter').value;
-try { localStorage.setItem('lj_printFilter', selectedPrint); } catch(e) {}
 var filtered = allOrders.filter(function(o){ return (o._orderStatus || 'inkomend') === currentTab; });
+// De verzendmethode-/print-status-/extra-filters horen bij de toolbar van
+// het "Inkomend"-tabblad (zie toolbarBox, alleen zichtbaar op die tab) en
+// mogen dus ook alleen dáár worden toegepast. Bug (gemeld door Pieter,
+// 23-09-2026, ORD81370/Ineke Roosenhoogh): deze filters werden voorheen op
+// ELK tabblad toegepast dat via dit generieke pad rendert - dus ook op
+// "Geannuleerd". Omdat de "Geprint"-dropdown standaard/persistent op "Geen
+// geprint" kan staan (onthouden via localStorage, zie
+// restorePersistedToolbarSettings), verdween daardoor stilletjes elke
+// geannuleerde order die al een pakbon/label had (vrijwel altijd het geval
+// - een order staat pas in "Gecreëerde labels" ná het aanmaken van een
+// label) uit de "Geannuleerd"-tab, terwijl de order zelf gewoon correct als
+// "geannuleerd" was opgeslagen. De order was dus nooit kwijt, alleen
+// onzichtbaar weggefilterd.
+var selectedMethod = '';
+var selectedPrint = '';
+if (currentTab === 'inkomend') {
+selectedMethod = document.getElementById('methodFilter').value;
+selectedPrint = document.getElementById('printFilter').value;
+try { localStorage.setItem('lj_printFilter', selectedPrint); } catch(e) {}
 if (selectedMethod) filtered = filtered.filter(function(o){ return o._shippingMethod === selectedMethod; });
 if (selectedPrint) filtered = filtered.filter(function(o){ return (o._printStatus || 'geen') === selectedPrint; });
 Object.keys(activeExtraFilters).forEach(function(key) {
@@ -884,6 +900,7 @@ var val = activeExtraFilters[key];
 var def = EXTRA_FILTER_DEFS[key];
 if (val && def) filtered = filtered.filter(function(o) { return def.getValue(o) === val; });
 });
+}
 document.getElementById('count').textContent = filtered.length;
 document.getElementById('filterCount').textContent = (selectedMethod || selectedPrint)
 ? filtered.length + ' van ' + allOrders.length + ' orders'
