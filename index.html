@@ -53,7 +53,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .count{font-size:48px;font-weight:800;color:#33401f;line-height:1}
 .stats-labels{display:flex;flex-direction:column;gap:6px}
 .stats-title{font-size:14px;color:#666}
-.stats-title-selection{font-size:16px;color:#2c2c2c;font-weight:600}
 .spinner{width:16px;height:16px;border:2px solid rgba(51,64,31,.3);border-top-color:#33401f;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
 @keyframes spin{to{transform:rotate(360deg)}}
 .empty{text-align:center;padding:80px 20px;color:#999}
@@ -710,10 +709,7 @@ if (afgehaaldInput) setTimeout(function() { afgehaaldInput.focus(); }, 0);
 return;
 }
 var titleEl = document.getElementById('statsTitle');
-if (titleEl) {
-titleEl.textContent = TAB_LABELS[tab] || '';
-titleEl.classList.toggle('stats-title-selection', tab === 'verzonden');
-}
+if (titleEl) titleEl.textContent = TAB_LABELS[tab] || '';
 // Op verzoek van Pieter (23-09-2026): de statistiekenkaart bovenaan
 // "Inkomend" had door de twee vaste badges hieronder ("Alle
 // verzendmethodes"/"Klaar voor verzending" - statische tekst, nooit
@@ -722,11 +718,11 @@ titleEl.classList.toggle('stats-title-selection', tab === 'verzonden');
 // + titel tonen. Badges verwijderd zodat de kaart er overal identiek
 // uitziet.
 // Op verzoek van Pieter (23-09-2026, voorbeeld: Sendcloud's "Verzonden"-tab)
-// toont het tabblad "Verzonden" bewust geen groot totaalaantal meer, maar
-// alleen het aantal geselecteerde zendingen (zie updateSelection()) - dat
-// totaal stond hier toch al los van wat je aan het doen bent op deze tab.
-var countEl = document.getElementById('count');
-if (countEl) countEl.style.display = (tab === 'verzonden') ? 'none' : '';
+// toont "Verzonden" i.p.v. het totaalaantal orders het aantal geselecteerde
+// zendingen (zie updateSelection()). Op verzoek van Pieter (23-09-2026,
+// vervolg): dat gebeurt weer in hetzelfde grote-getal-formaat als de
+// overige tabbladen (bv. "Gecreëerde labels": groot getal + titel eronder),
+// dus #count blijft hier - anders dan eerder - gewoon zichtbaar.
 applyFilter();
 }
 
@@ -926,16 +922,19 @@ var __selectAllCb = document.getElementById('selectAllCheckbox'); if (__selectAl
 var __labelPrintBtn = document.getElementById('labelPrintBtn'); if (__labelPrintBtn) __labelPrintBtn.disabled = checked.length === 0;
 var __labelPrintCaretBtn = document.getElementById('labelPrintCaretBtn'); if (__labelPrintCaretBtn) __labelPrintCaretBtn.disabled = checked.length === 0;
 var __labelSelCountEl = document.getElementById('labelSelCount'); if (__labelSelCountEl) __labelSelCountEl.textContent = checked.length;
-// "Verzonden" toont hier bewust alleen het aantal geselecteerde zendingen
-// i.p.v. het totaalaantal (zie switchTab(), op verzoek van Pieter
-// 23-09-2026) - dit moet ook live meebewegen zodra je een checkbox
-// aan-/uitvinkt, niet alleen bij het wisselen van tabblad.
+// "Verzonden" toont hier bewust het aantal geselecteerde zendingen i.p.v.
+// het totaalaantal (zie switchTab(), op verzoek van Pieter 23-09-2026) -
+// dit moet ook live meebewegen zodra je een checkbox aan-/uitvinkt, niet
+// alleen bij het wisselen van tabblad. Zelfde groot-getal-opmaak als de
+// overige tabbladen (op verzoek van Pieter 23-09-2026, vervolg): het getal
+// in #count, de tekst ernaast in #statsTitle - net als "15 Labels
+// aangemaakt" op het tabblad "Gecreëerde labels".
 if (currentTab === 'verzonden') {
-var __verzondenTitleEl = document.getElementById('statsTitle');
-if (__verzondenTitleEl) {
 var __n = checked.length;
-__verzondenTitleEl.textContent = __n + (__n === 1 ? ' geselecteerde zending' : ' geselecteerde zendingen');
-}
+var __verzondenCountEl = document.getElementById('count');
+if (__verzondenCountEl) __verzondenCountEl.textContent = __n;
+var __verzondenTitleEl = document.getElementById('statsTitle');
+if (__verzondenTitleEl) __verzondenTitleEl.textContent = (__n === 1 ? 'geselecteerde zending' : 'geselecteerde zendingen');
 }
 }
 
