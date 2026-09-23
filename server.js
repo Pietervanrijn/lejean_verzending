@@ -841,7 +841,15 @@ orderReference: 'LJ-' + order.number,
 recipient: {
 name: naam,
 emailAddress: order.email || '',
-phoneNumber: order.telephone || order.addressShippingPhone || '',
+// Bug (gemeld door Pieter, 23-09-2026): het telefoonnummer kwam nooit aan
+// in het Trunkrs-portaal. Oorzaak: Lightspeed levert het telefoonnummer in
+// de praktijk altijd in het veld 'phone' (en soms daarnaast een los
+// 'mobile'-nummer) - de velden 'telephone'/'addressShippingPhone' die hier
+// eerder werden gelezen bestaan niet in de Lightspeed-orderdata (op alle
+// 470 gecontroleerde orders 0x aanwezig, tegenover 'phone' op alle 470).
+// Zelfde volgorde als het label-detailscherm in index.html (openLabelDetail)
+// al gebruikt voor de weergave (o.telephone || o.mobile || o.phone).
+phoneNumber: order.phone || order.mobile || order.telephone || order.addressShippingPhone || '',
 address: straatRegel,
 postalCode: order.addressShippingZipcode || '',
 city: order.addressShippingCity || '',
