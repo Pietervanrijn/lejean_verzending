@@ -1005,20 +1005,40 @@ resultBox.innerHTML =
 '<div class="afgehaald-empty">' +
 '<div class="afgehaald-empty-icon">&#128715;</div>' +
 '<h3>Scan een afhaal-order</h3>' +
-'<p>Scan de streepjescode op de pakbon, of typ het ordernummer hierboven in het zoekveld. Dit werkt alleen voor bestellingen met verzendmethode "Afhalen" die nog bij <a onclick="switchTab(\'inkomend\')">Inkomende orders</a> staan.</p>' +
+'<p>Scan de streepjescode op de pakbon, of typ het ordernummer hierboven in het zoekveld. Dit werkt voor alle bestellingen met verzendmethode "Afhalen" die nog niet zijn afgehaald.</p>' +
 '</div>';
 }
 
 // Zelfde matching als Pack & Go (findOrderByScannedId, parsePakbonBarcode
 // hierboven), maar dan met een eigen foutafhandeling: hier moet de order
 // ook daadwerkelijk een afhaal-order zijn en nog als "inkomend" openstaan.
-function handleAfgehaaldScan(rawValue) {
+// Fix 25-09-2026: afhaal-orders die al op "Klaar om opgehaald te worden"
+// staan (gebeurt automatisch na het printen van de pakbon) vallen in
+// Lightspeed buiten de statussen die /api/orders ophaalt, en stonden dus
+// nooit in allOrders -> scannen én ORD-nummer intypen gaven altijd "Geen
+// order gevonden". Nu: eerst lokaal zoeken, anders gericht bij de server
+// (/api/orders/lookup) opvragen, die de order vers bij Lightspeed ophaalt.
+async function handleAfgehaaldScan(rawValue) {
 var errorBox = document.getElementById('afgehaaldScanError');
 errorBox.textContent = '';
 var idStr = parsePakbonBarcode(rawValue);
 var order = findOrderByScannedId(idStr);
 if (!order) {
+errorBox.textContent = 'Zoeken…';
+try {
+var code = String(rawValue).trim();
+var res = await fetch('/api/orders/lookup/' + encodeURIComponent(code));
+var data = await res.json().catch(function(){ return {}; });
+if (res.ok && data.order) order = data.order;
+} catch(e) { /* valt hieronder terug op "geen order gevonden" */ }
+errorBox.textContent = '';
+}
+if (!order) {
 errorBox.textContent = 'Geen order gevonden voor gescande code "' + rawValue + '".';
+return;
+}
+if (order.shipmentStatus === 'shipped' || /^completed/.test(order.status || '')) {
+errorBox.textContent = 'Order ' + (order._ordNummer || order.number) + ' is al afgehaald / als verzonden gemarkeerd in Lightspeed.';
 return;
 }
 if (resolveCarrierKey(order) !== 'afhalen') {
@@ -2079,7 +2099,8 @@ function findOrderByScannedId(idStr) {
 if (!idStr) return null;
 var num = parseInt(idStr, 10);
 return allOrders.find(function(o) {
-return String(o.id) === idStr || parseInt(o.id, 10) === num || String(o.number) === idStr || parseInt(o.number, 10) === num;
+var bareNum = String(o.number == null ? '' : o.number).replace(/^ORD/i, '');
+return String(o.id) === idStr || parseInt(o.id, 10) === num || bareNum === idStr || parseInt(bareNum, 10) === num;
 }) || null;
 }
 
