@@ -69,10 +69,20 @@ const TRUNKRS_WAREHOUSE_SCAN_OR_LATER_CODES = [
 // "Gecreëerde labels"/"Verzonden", en de knop), wat die actie na verloop van
 // maanden steeds trager maakt - gemeld door Pieter (19-09-2026: het duurt
 // lang voordat de status van de zending wordt bijgewerkt).
+// Bug (gemeld door Pieter, 25-09-2026, ORD81274): SHIPMENT_NOT_DELIVERED
+// stond hier eerder ook bij, in de veronderstelling dat dit een echte
+// eindstatus was. In de praktijk is dat niet zo: bij ORD81274 gaf Trunkrs
+// deze status met reasonCode NO_TIME_LEFT_IN_TIMESLOT (de bezorger kwam er
+// die dag niet meer aan toe), waarna de zending alsnog is bezorgd -
+// SHIPMENT_NOT_DELIVERED bleek dus geen eindpunt maar een tussenstap voor
+// een nieuwe bezorgpoging. Omdat deze order daardoor als "klaar" werd
+// beschouwd, stopte het pollen en bleef de kaart in LJ Verzending op "Niet
+// bezorgd" staan terwijl Trunkrs allang "Bezorgd" liet zien. Verwijderd uit
+// deze lijst zodat zulke orders gewoon blijven meedoen met "Statussen
+// verversen" totdat er echt een eindstatus binnenkomt.
 const TRUNKRS_TERMINAL_STATE_CODES = [
   'SHIPMENT_DELIVERED',
-  'SHIPMENT_DELIVERED_TO_NEIGHBOR',
-  'SHIPMENT_NOT_DELIVERED'
+  'SHIPMENT_DELIVERED_TO_NEIGHBOR'
 ];
 
 // --- Pack & Go: aparte PIN-beveiliging (wie heeft een label geprint?) ----
