@@ -905,6 +905,52 @@ res.status(500).json({ error: e.message });
 }
 });
 
+// Gericht 1 order opzoeken op gescande pakbon-barcode (PS000...<id>) of
+// ordernummer (ORD81234 / 81234) - voor het "Afgehaald"-tabblad (25-09-2026).
+// Nodig omdat een afhaal-order na het printen van de pakbon automatisch op
+// "Klaar om opgehaald te worden" (isReadyForPickup) wordt gezet: Lightspeed
+// verplaatst 'm dan naar status "Ready for pickup", die NIET in fetchOrders()
+// zit (alleen awaiting_shipment/awaiting_pickup). Precies de orders die aan
+// de balie gescand worden, stonden dus nooit in de lijst -> "Geen order
+// gevonden", zowel bij scannen als bij intypen van het ordernummer.
+// Altijd vers bij Lightspeed opgehaald (geen orderDetailCache), zodat een al
+// afgehaalde/verzonden order ook als zodanig herkend wordt.
+app.get('/api/orders/lookup/:code', async (req, res) => {
+try {
+const raw = String(req.params.code || '').trim().toUpperCase();
+let id = null;
+let expectNumber = null; // bij intypen ordernummer: controle dat de gevonden order dat nummer ook echt heeft
+const ps = raw.match(/^PS0*(\d+)$/);
+if (ps) {
+id = ps[1];
+} else {
+const bare = bareOrderNumberKey(raw).replace(/\D/g, '');
+if (!bare) return res.status(400).json({ error: 'Ongeldige code' });
+expectNumber = bare.replace(/^0+/, '');
+id = orderIdMapStore[bare] || orderIdMapStore[bare.replace(/^0+/, '')] || null;
+// Onbekend ordernummer: als laatste poging de code als order-id proberen.
+if (!id) id = bare;
+}
+let order;
+try {
+const r = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + id + '.json', { headers: apiHeaders() });
+order = r.data && r.data.order;
+} catch(e) {
+if (e.response && e.response.status === 404) return res.status(404).json({ error: 'Order niet gevonden' });
+throw e;
+}
+if (!order) return res.status(404).json({ error: 'Order niet gevonden' });
+if (expectNumber && String(order.id) !== expectNumber && bareOrderNumberKey(order.number).replace(/^0+/, '') !== expectNumber) {
+return res.status(404).json({ error: 'Order niet gevonden' });
+}
+const [enriched] = await enrichOrders([order]);
+res.json({ order: enriched });
+} catch(e) {
+console.error('order lookup error:', e.message);
+res.status(500).json({ error: e.message });
+}
+});
+
 app.get('/api/orders/:id/products', async (req, res) => {
 try {
 const r = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + req.params.id + '/products.json', { headers: apiHeaders() });
