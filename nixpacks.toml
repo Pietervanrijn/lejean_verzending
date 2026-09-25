@@ -1,0 +1,18 @@
+# Zorgt dat Railway een kant-en-klare Chromium meebouwt via Nix i.p.v. dat
+# Puppeteer bij elke `npm install` zijn eigen Chromium (~200 MB) downloadt.
+# Dat downloaden was de belangrijkste reden dat deploys sinds 2026-08-31
+# (toen puppeteer erbij kwam voor het direct printen van pakbonnen) een stuk
+# langer duurden. Dit bestand voegt alleen "chromium" toe aan de package-lijst
+# die de Node-provider van Nixpacks toch al gebruikt (die lijst wordt
+# samengevoegd, niet vervangen) - er verandert verder niets aan hoe de app
+# gebouwd of gestart wordt.
+[phases.setup]
+nixPkgs = ["chromium"]
+
+# PUPPETEER_SKIP_DOWNLOAD zorgt dat `npm install` geen eigen Chromium meer
+# downloadt (die is nu niet meer nodig, zie hierboven). server.js zoekt de
+# net toegevoegde Chromium vervolgens zelf op via "which chromium" - lokaal
+# (waar deze variabele niet gezet is) blijft alles ongewijzigd werken met
+# Puppeteer's eigen gedownloade Chromium.
+[variables]
+PUPPETEER_SKIP_DOWNLOAD = "true"
