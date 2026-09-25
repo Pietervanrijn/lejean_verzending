@@ -1305,12 +1305,29 @@ return Buffer.from(await pdfDoc.save());
 // 1 gedeelde browserinstantie wordt hergebruikt over meerdere aanroepen heen
 // (opstarten van Chromium kost ruim 1 seconde, dat wil je niet per pakbon
 // opnieuw doen); alleen de pagina zelf wordt per aanroep geopend/gesloten.
+// Op Railway installeert nixpacks.toml een kant-en-klare Chromium via Nix
+// (zie dat bestand) i.p.v. dat Puppeteer die zelf downloadt bij npm install -
+// dat scheelde flink in deploytijd. Deze functie zoekt die Chromium op via
+// "which chromium"; lukt dat niet (bv. lokaal op een Mac/Windows-pc, waar
+// nixpacks.toml niet van toepassing is), dan valt Puppeteer terug op zijn
+// eigen gedownloade Chromium zoals voorheen - lokaal ontwikkelen verandert
+// dus niet.
+function resolvePuppeteerExecutablePath() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
+  try {
+    const path = require('child_process').execSync('which chromium', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    return path || undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
 let puppeteerBrowserPromise = null;
 function getPuppeteerBrowser() {
   if (!puppeteerBrowserPromise) {
     const puppeteer = require('puppeteer');
     puppeteerBrowserPromise = puppeteer.launch({
       headless: 'new',
+      executablePath: resolvePuppeteerExecutablePath(),
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     }).catch(function(e) { puppeteerBrowserPromise = null; throw e; });
   }
