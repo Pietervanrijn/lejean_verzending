@@ -62,28 +62,27 @@ const TRUNKRS_WAREHOUSE_SCAN_OR_LATER_CODES = [
 // om aparte aandacht i.p.v. stilzwijgend als "verzonden" te tellen. Zulke
 // orders blijven in "Gecreëerde labels" staan, met hun eigen statusbadge.
 
-// Echte eindstatussen: hierna verandert een zending bij Trunkrs niet meer,
-// dus heeft doorpollen (zie /api/trunkrs/refresh-statuses verderop) geen zin
-// meer. Zonder deze uitsluiting blijft ELKE ooit aangemaakte Trunkrs-zending
-// voor altijd meegenomen bij "Statussen verversen" (elke tabwissel naar
-// "Gecreëerde labels"/"Verzonden", en de knop), wat die actie na verloop van
-// maanden steeds trager maakt - gemeld door Pieter (19-09-2026: het duurt
-// lang voordat de status van de zending wordt bijgewerkt).
-// Bug (gemeld door Pieter, 25-09-2026, ORD81274): SHIPMENT_NOT_DELIVERED
-// stond hier eerder ook bij, in de veronderstelling dat dit een echte
-// eindstatus was. In de praktijk is dat niet zo: bij ORD81274 gaf Trunkrs
-// deze status met reasonCode NO_TIME_LEFT_IN_TIMESLOT (de bezorger kwam er
-// die dag niet meer aan toe), waarna de zending alsnog is bezorgd -
-// SHIPMENT_NOT_DELIVERED bleek dus geen eindpunt maar een tussenstap voor
-// een nieuwe bezorgpoging. Omdat deze order daardoor als "klaar" werd
-// beschouwd, stopte het pollen en bleef de kaart in LJ Verzending op "Niet
-// bezorgd" staan terwijl Trunkrs allang "Bezorgd" liet zien. Verwijderd uit
-// deze lijst zodat zulke orders gewoon blijven meedoen met "Statussen
-// verversen" totdat er echt een eindstatus binnenkomt.
-const TRUNKRS_TERMINAL_STATE_CODES = [
-  'SHIPMENT_DELIVERED',
-  'SHIPMENT_DELIVERED_TO_NEIGHBOR'
-];
+// Codes die we als "definitief bezorgd" beschouwen - gebruikt om te bepalen
+// wanneer we mogen stoppen met statussen verversen bij Trunkrs (zie
+// /api/trunkrs/refresh-statuses verderop, TRUNKRS_REFRESH_DELIVERED_GRACE_MS).
+// Zonder zo'n afkap blijft ELKE ooit aangemaakte Trunkrs-zending voor altijd
+// meegenomen bij "Statussen verversen" (elke tabwissel naar "Gecreëerde
+// labels"/"Verzonden", en de knop), wat die actie na verloop van maanden
+// steeds trager maakt - gemeld door Pieter (19-09-2026: het duurt lang
+// voordat de status van de zending wordt bijgewerkt).
+// Bewust een kleinere set dan TRUNKRS_WAREHOUSE_SCAN_OR_LATER_CODES
+// hierboven, en bewust ZONDER SHIPMENT_NOT_DELIVERED (bug gemeld door
+// Pieter, 25-09-2026, ORD81274): die status bleek in de praktijk geen
+// eindpunt maar een tussenstap voor een nieuwe bezorgpoging - bij ORD81274
+// gaf Trunkrs deze status met reasonCode NO_TIME_LEFT_IN_TIMESLOT (de
+// bezorger kwam er die dag niet meer aan toe), waarna de zending alsnog is
+// bezorgd. Toen deze status hier nog wel bij stond, werd zo'n order als
+// "klaar" beschouwd, stopte het pollen, en bleef de kaart in LJ Verzending
+// op "Niet bezorgd" staan terwijl Trunkrs allang "Bezorgd" liet zien.
+// Zulke orders (en overige EXCEPTION_*/RETURN_*-codes) blijven daarom
+// gewoon meedoen met "Statussen verversen" - tot de 14-dagen-afkap
+// hieronder, net als elke andere nog niet (definitief) bezorgde zending.
+const TRUNKRS_DELIVERED_CODES = ['SHIPMENT_DELIVERED', 'SHIPMENT_DELIVERED_TO_NEIGHBOR'];
 
 // --- Pack & Go: aparte PIN-beveiliging (wie heeft een label geprint?) ----
 // Op verzoek van Pieter (2026-08-29): geen volledige gebruikersaccounts,
@@ -2125,16 +2124,29 @@ res.status(500).json({ error: 'Label annuleren mislukt: ' + detail });
 // Fase-2-webhooks (automatisch, zie project-notities) zijn nog niet gebouwd;
 // dit endpoint pollt op aanvraag (bv. bij het openen van een tabblad) i.p.v.
 // continu op de achtergrond, om binnen de Trunkrs-rate-limits te blijven.
+// Hoe lang blijven we een label meenemen in de refresh-poll hieronder -
+// zonder afkap wordt dit elke keer dat iemand "Gecreëerde labels" of
+// "Verzonden" opent een lookup bij Trunkrs voor ELK label dat ooit is
+// aangemaakt, ook labels van maanden geleden die allang bezorgd zijn. Dat
+// kost niets zolang de winkel klein is, maar schaalt met het totale aantal
+// ooit aangemaakte labels i.p.v. met de dagelijkse drukte, en loopt zo op
+// termijn tegen Trunkrs' eigen rate limit aan - precies het probleem dat we
+// eerder al bij Lightspeed hadden (zie mapWithConcurrency hierboven).
+// Op verzoek van Pieter (12-09-2026): een label stopt met pollen zodra het
+// 14 dagen oud is (sowieso niet meer relevant), of zodra het al 12 uur
+// geleden voor het eerst op "bezorgd" stond (nog een korte marge voor een
+// eventuele latere statuscorrectie van Trunkrs, maar niet voor altijd).
+const TRUNKRS_REFRESH_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const TRUNKRS_REFRESH_DELIVERED_GRACE_MS = 12 * 60 * 60 * 1000;
+
 app.post('/api/trunkrs/refresh-statuses', async (req, res) => {
 if (!TRUNKRS_API_KEY) return res.status(503).json({ error: 'TRUNKRS_API_KEY is niet ingesteld (Railway env var).' });
+const now = Date.now();
 const keys = Object.keys(trunkrsLabelsStore).filter(function(k) {
 const entry = trunkrsLabelsStore[k];
 if (!entry || !entry.trunkrsNr || entry.cancelledAt) return false;
-// Al in een eindstatus (afgeleverd/niet afgeleverd) - die verandert niet
-// meer, dus niet opnieuw opvragen bij Trunkrs (zie TRUNKRS_TERMINAL_STATE_CODES
-// hierboven voor waarom dit nodig is).
-const code = entry.state && entry.state.code;
-if (code && TRUNKRS_TERMINAL_STATE_CODES.indexOf(code) !== -1) return false;
+if (entry.createdAt && (now - new Date(entry.createdAt).getTime()) > TRUNKRS_REFRESH_MAX_AGE_MS) return false;
+if (entry.deliveredAt && (now - new Date(entry.deliveredAt).getTime()) > TRUNKRS_REFRESH_DELIVERED_GRACE_MS) return false;
 return true;
 });
 let orderStatusChanged = false;
@@ -2145,11 +2157,17 @@ try {
 const r = await axios.get(TRUNKRS_BASE_URL + '/shipments/' + entry.trunkrsNr, { headers: trunkrsHeaders() });
 const data = (r.data && r.data.data) ? r.data.data : r.data;
 if (data && data.state) entry.state = data.state;
+const code = data && data.state && data.state.code;
+// Peildatum voor de 12-uurs-afkap hierboven - alleen de eerste keer
+// gezet (nooit overschrijven), anders schuift "12 uur na bezorgd" elke
+// refresh weer op en stopt het nooit met pollen.
+if (code && TRUNKRS_DELIVERED_CODES.indexOf(code) !== -1 && !entry.deliveredAt) {
+entry.deliveredAt = new Date().toISOString();
+}
 // Automatische overgang "Gecreëerde labels" -> "Verzonden" zodra Trunkrs
 // de zending voor het eerst fysiek scant (binnenkomst/sortering op hun
 // warehouse) - op verzoek van Pieter (2026-08-29). Alleen vooruit, nooit
 // een al op "geannuleerd" gezette order overschrijven.
-const code = data && data.state && data.state.code;
 if (code && TRUNKRS_WAREHOUSE_SCAN_OR_LATER_CODES.indexOf(code) !== -1 &&
 orderStatusStore[key] !== 'geannuleerd' && orderStatusStore[key] !== 'verzonden') {
 orderStatusStore[key] = 'verzonden';
