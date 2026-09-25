@@ -3167,10 +3167,21 @@ window.open(url, '_blank');
 function bulkPrintLabels() {
 var checked = Array.from(document.querySelectorAll('.order-checkbox:checked'));
 if (!checked.length) return;
+var btn = document.getElementById('labelPrintBtn');
+// Beveiliging tegen ongewenst dubbel printen: als een vinkje van een eerder
+// (opnieuw) geprint label blijft aanstaan, kan deze knop nog focus hebben
+// staan van die vorige klik. Een barcodescanner stuurt na het scannen vaak
+// een Enter-toets mee - als die Enter dan nog op deze knop terechtkomt,
+// ziet de browser dat als nog een klik hierop, en werd het label opnieuw
+// afgedrukt terwijl er zogenaamd een andere order werd gescand. Daarom hier
+// meteen de focus van de knop weghalen en de knop tijdens het printen
+// uitschakelen, zodat zo'n herhaalde klik geen effect meer heeft (op
+// verzoek van Pieter, 2026-09-25).
+if (btn) { btn.blur(); if (btn.disabled) return; btn.disabled = true; }
 var nums = checked.map(function(cb){ return cb.getAttribute('data-num'); });
 var station = findDirectPrintStation('label');
 ensurePackGoNaam(function(naam) {
-if (!naam) return;
+if (naam) {
 nums.forEach(function(num) {
 var o = findOrderByOrdNummer(num);
 var tl = o && o._trunkrsLabel;
@@ -3179,6 +3190,12 @@ if (station) { sendLabelDirectToStation(num, station, naam); return; }
 var url = resolveLabelPdfUrl(tl.label.pdf, num);
 if (url) markPrintedAndOpen(num, url, naam);
 });
+// Vinkjes na het printen altijd uitzetten - zo blijft een label niet
+// "geselecteerd staan" en kan het niet per ongeluk nogmaals worden
+// afgedrukt bij een volgende actie (zie toelichting hierboven).
+checked.forEach(function(cb){ cb.checked = false; });
+}
+updateSelection();
 });
 }
 
