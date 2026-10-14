@@ -2208,12 +2208,20 @@ const TRUNKRS_REFRESH_DELIVERED_GRACE_MS = 12 * 60 * 60 * 1000;
 
 app.post('/api/trunkrs/refresh-statuses', async (req, res) => {
 if (!TRUNKRS_API_KEY) return res.status(503).json({ error: 'TRUNKRS_API_KEY is niet ingesteld (Railway env var).' });
+// force=true (alleen de "Statussen verversen"-knop op "Verzonden" stuurt dit
+// mee) negeert de 12-uurs-"al bezorgd"-afkap hieronder: zonder die uitzondering
+// deed die knop voor zo goed als alle zendingen op "Verzonden" niets, want
+// die orders zijn doorgaans juist al langer dan 12u geleden bezorgd (op
+// verzoek van Pieter, 2026-10-14). De 14-dagen-afkap blijft wel altijd
+// gelden, ook bij een handmatige klik - die labels zijn sowieso niet meer
+// relevant.
+const force = !!(req.body && req.body.force);
 const now = Date.now();
 const keys = Object.keys(trunkrsLabelsStore).filter(function(k) {
 const entry = trunkrsLabelsStore[k];
 if (!entry || !entry.trunkrsNr || entry.cancelledAt) return false;
 if (entry.createdAt && (now - new Date(entry.createdAt).getTime()) > TRUNKRS_REFRESH_MAX_AGE_MS) return false;
-if (entry.deliveredAt && (now - new Date(entry.deliveredAt).getTime()) > TRUNKRS_REFRESH_DELIVERED_GRACE_MS) return false;
+if (!force && entry.deliveredAt && (now - new Date(entry.deliveredAt).getTime()) > TRUNKRS_REFRESH_DELIVERED_GRACE_MS) return false;
 return true;
 });
 let orderStatusChanged = false;
