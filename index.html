@@ -2088,6 +2088,14 @@ return alleHoudbaar ? 'SAME_DAY' : 'SAME_DAY_FROZEN_FOOD';
 
 var packGoCurrent = null; // { order, products, autoService, labelCreated }
 var packGoOverrideOpen = false; // UI-state van het potloodje (service handmatig aanpassen), per kaart
+// Voorkomt dat een 2e scan (bv. omdat de eerste scan geen directe zichtbare
+// feedback leek te geven) een overlappende, 2e labelaanmaak-aanvraag voor
+// dezelfde order start terwijl de 1e nog bezig is - zie ook de server-side
+// lock in /api/trunkrs/label (server.js), die dit uiteindelijk hard afdwingt
+// ongeacht wat hier misgaat. Dit is puur de snelle, client-side kant ervan
+// (directe feedback i.p.v. wachten op de server-afwijzing). Gevonden n.a.v.
+// ORD82323 (2026-10-14): 2x gescand, 2 losse Trunkrs-zendingen aangemaakt.
+var packGoBusy = false;
 
 function initPackGoScanner() {
 var input = document.getElementById('packGoScanInput');
@@ -2181,6 +2189,14 @@ return String(o.id) === idStr || parseInt(o.id, 10) === num || bareNum === idStr
 async function handlePackGoScan(rawValue) {
 var errorBox = document.getElementById('packGoScanError');
 errorBox.textContent = '';
+// Voorkomt een overlappende 2e aanvraag terwijl de vorige scan (zoeken
+// en/of label aanmaken) nog bezig is - zie de toelichting bij packGoBusy
+// hierboven. De server wijst een dubbele aanvraag ook zelf af, maar dit
+// geeft meteen feedback zonder op dat antwoord te hoeven wachten.
+if (packGoBusy) {
+errorBox.textContent = 'Vorige scan wordt nog verwerkt - heel even geduld.';
+return;
+}
 var idStr = parsePakbonBarcode(rawValue);
 var order = findOrderByScannedId(idStr);
 if (!order) {
@@ -2188,6 +2204,8 @@ errorBox.textContent = 'Geen order gevonden voor gescande code "' + rawValue + '
 return;
 }
 
+packGoBusy = true;
+try {
 // Standaardmodus (Single scan uit): een TWEEDE scan van dezelfde, nog niet
 // bevestigde order geldt als bevestiging - net als in het Sendcloud-
 // voorbeeld ("de tweede scan bevestigt alle wijzigingen en drukt vervolgens
@@ -2196,11 +2214,14 @@ return;
 // loadPackGoOrder hieronder), dus dan komt dit pad niet voor.
 if (!getPackGoSingleScanMode() && packGoCurrent && !packGoCurrent.labelCreated &&
 String(packGoCurrent.order.id) === String(order.id)) {
-packGoCreateLabel();
+await packGoCreateLabel();
 return;
 }
 
 await loadPackGoOrder(order);
+} finally {
+packGoBusy = false;
+}
 }
 
 async function loadPackGoOrder(order) {
@@ -2224,7 +2245,11 @@ renderPackGoOrder();
 // (zie renderPackGoOrder hieronder voor de waarschuwing in de kaart zelf);
 // de server blokkeert dit ook (zie /api/trunkrs/label in server.js).
 if (getPackGoSingleScanMode() && !order._trunkrsLabel && resolveCarrierKey(order) === 'trunkrs') {
-packGoCreateLabel();
+// Bewust ge-await't (was voorheen fire-and-forget): anders gaf
+// loadPackGoOrder() al "klaar" terug terwijl de labelaanmaak op de
+// achtergrond nog liep, waardoor packGoBusy (zie handlePackGoScan) te
+// vroeg weer vrijgaf en een snelle 2e scan alsnog kon overlappen.
+await packGoCreateLabel();
 }
 } catch(e) {
 resultBox.innerHTML = '<div class="packgo-card"><div class="packgo-error-box">Kon producten niet ophalen: ' + escapeHtml(e.message) + '</div></div>';
