@@ -1120,10 +1120,32 @@ return { ok: false, error: e.message };
 }
 }
 
+// Orders waarvoor DEZE instantie op dit moment al een Trunkrs-label aan het
+// aanmaken is (tussen het ontvangen van de aanvraag en het wegschrijven naar
+// trunkrsLabelsStore). Nodig naast de bestaande idempotentie-check hieronder:
+// die check leest/schrijft trunkrsLabelsStore, maar schrijft pas NA de trage
+// aanroep naar Trunkrs zelf (vaak enkele honderden ms) - twee aanvragen voor
+// dezelfde order die vlak na elkaar binnenkomen (dubbele scan in Pack & Go
+// omdat de eerste scan geen zichtbare feedback leek te geven, een dubbelklik,
+// of een netwerk-retry) lezen dan allebei nog een "nog geen label"-store en
+// komen er dus allebei doorheen - precies wat er gebeurde met ORD82323
+// (2026-10-14, 2 echte Trunkrs-zendingen aangemaakt, 420678591 + 420678593,
+// waarvan de tweede de eerste in trunkrsLabelsStore overschreef zodat er
+// maar 1 zichtbaar was in "Gecreëerde labels"). Deze lock sluit dat gat:
+// sleutelt op orderId (synchroon bekend, geen Lightspeed-aanroep nodig) en
+// wijst een tweede, overlappende aanvraag voor dezelfde order direct af
+// i.p.v. ook bij Trunkrs aan te kloppen.
+const labelCreationInFlight = new Set();
+
 app.post('/api/trunkrs/label', async (req, res) => {
 if (!TRUNKRS_API_KEY) return res.status(503).json({ error: 'TRUNKRS_API_KEY is niet ingesteld (Railway env var).' });
 const { orderId, serviceOverride } = req.body || {};
 if (!orderId) return res.status(400).json({ error: 'orderId verplicht' });
+const inFlightKey = String(orderId);
+if (labelCreationInFlight.has(inFlightKey)) {
+return res.status(409).json({ error: 'Voor deze order wordt al een Trunkrs-label aangemaakt (dubbele aanvraag, bv. 2x gescand vlak na elkaar) - wacht het resultaat van de eerste aanvraag af in plaats van opnieuw te scannen.' });
+}
+labelCreationInFlight.add(inFlightKey);
 try {
 const orderRes = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + orderId + '.json', { headers: apiHeaders() });
 let order = orderRes.data.order;
@@ -1248,6 +1270,8 @@ lightspeedSyncError: lightspeedSync.ok ? null : lightspeedSync.error
 const detail = e.response ? JSON.stringify(e.response.data) : e.message;
 console.error('trunkrs/label error for order ' + orderId + ':', detail);
 res.status(500).json({ error: 'Trunkrs-label aanmaken mislukt: ' + detail });
+} finally {
+labelCreationInFlight.delete(inFlightKey);
 }
 });
 
