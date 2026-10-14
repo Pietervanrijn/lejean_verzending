@@ -364,7 +364,7 @@ blijft in plaats van meteen 2 volledige lijsten onder elkaar te tonen
 <div class="toolbar-row toolbar-actions-row">
 <div class="print-btn-group">
 <button type="button" class="print-btn print-btn-main" id="printBtn" onclick="executeCurrentPrintAction()" disabled>Aanmaken: <span id="printModeLabel">Pakbonnen</span> (<span id="selCount">0</span>)</button>
-<button type="button" class="print-btn-caret" id="printCaretBtn" onclick="toggleVerzendMenu(event)" disabled><span class="print-btn-arrow">&#x25BE;</span></button>
+<button type="button" class="print-btn-caret" id="printCaretBtn" onclick="toggleVerzendMenu(event)"><span class="print-btn-arrow">&#x25BE;</span></button>
 <div class="print-dropdown-menu" id="verzendMenu">
 <div class="print-dropdown-item" data-mode="labels" onclick="setPrintMode('labels')"><span>Verzendlabels</span><span class="pdi-check">&#10003;</span></div>
 <div class="print-dropdown-item" data-mode="pakbon_labels" onclick="setPrintMode('pakbon_labels')"><span>Pakbonnen + verzendlabels</span><span class="pdi-check">&#10003;</span></div>
@@ -455,7 +455,7 @@ blijft in plaats van meteen 2 volledige lijsten onder elkaar te tonen
 <option value="">Alle zendingstatussen</option>
 </select>
 <input type="text" class="label-search-input" id="verzondenSearchInput" placeholder="Zoek naar zendingen (order, klant, tracking)&hellip;" oninput="applyVerzondenSearch(this.value)">
-<button type="button" class="print-btn" onclick="refreshTrunkrsStatuses()">Statussen verversen</button>
+<button type="button" class="print-btn" id="verzondenRefreshBtn" onclick="refreshTrunkrsStatuses(true, this)">Statussen verversen</button>
 <span class="filter-count" id="verzondenFilterCount"></span>
 </div>
 <div id="errorBox"></div>
@@ -923,7 +923,11 @@ var checked = document.querySelectorAll('.order-checkbox:checked');
 var allBoxes = document.querySelectorAll('.order-checkbox');
 var __selCountEl = document.getElementById('selCount'); if (__selCountEl) __selCountEl.textContent = checked.length;
 document.getElementById('printBtn').disabled = checked.length === 0;
-var __caretBtn = document.getElementById('printCaretBtn'); if (__caretBtn) __caretBtn.disabled = checked.length === 0;
+// printCaretBtn (het filter/keuzemenu voor wat "Aanmaken" straks produceert -
+// pakbon/label/etc.) blijft bewust altijd klikbaar, ook zonder selectie: dat
+// is alleen een instelling, geen actie op zich - op verzoek van Pieter
+// (2026-10-14), die deze anders niet kon wijzigen voordat er iets
+// geselecteerd was.
 var __selectAllCb = document.getElementById('selectAllCheckbox'); if (__selectAllCb) { __selectAllCb.checked = allBoxes.length > 0 && checked.length === allBoxes.length; }
 var __labelPrintBtn = document.getElementById('labelPrintBtn'); if (__labelPrintBtn) __labelPrintBtn.disabled = checked.length === 0;
 var __labelPrintCaretBtn = document.getElementById('labelPrintCaretBtn'); if (__labelPrintCaretBtn) __labelPrintCaretBtn.disabled = checked.length === 0;
@@ -2869,10 +2873,22 @@ return { label: humanizeStateCode(code), cls: 'zst-onbekend' };
 
 // Vraagt de server om voor alle bekende Trunkrs-labels de actuele status op
 // te halen bij Trunkrs zelf (i.p.v. de status van het moment van aanmaken te
-// blijven tonen). Wordt aangeroepen bij het openen van "Gecreëerde labels"
-// of "Verzonden"; ook handmatig te herhalen via de "Statussen verversen"-knop.
-function refreshTrunkrsStatuses() {
-fetch('/api/trunkrs/refresh-statuses', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
+// blijven tonen). Wordt automatisch aangeroepen bij het openen van
+// "Gecreëerde labels" of "Verzonden" (force=false: dan gelden de normale
+// afkapgrenzen op de server - te oud, of al >12u geleden bezorgd - om
+// /api/trunkrs/refresh-statuses niet onnodig te belasten). De "Statussen
+// verversen"-knop op "Verzonden" roept dit aan met force=true: zonder dat
+// zou die knop voor zo goed als alle zendingen daar niets lijken te doen,
+// want "Verzonden" toont juist orders die meestal al >12u bezorgd zijn en
+// dus normaal worden overgeslagen - op verzoek van Pieter (2026-10-14), die
+// de knop niets zag doen.
+function refreshTrunkrsStatuses(force, btn) {
+if (btn) { btn.disabled = true; var __origLabel = btn.textContent; btn.textContent = 'Verversen…'; }
+fetch('/api/trunkrs/refresh-statuses', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ force: !!force })
+}).then(function(r) { return r.json(); }).then(function(data) {
 var labels = data.labels || {};
 var statuses = data.orderStatus || {};
 // Let op: trunkrsLabelsStore/orderStatusStore zijn server-side altijd
@@ -2889,7 +2905,11 @@ if (statuses[key]) o._orderStatus = statuses[key];
 populateVerzondenStatusFilter();
 if (currentTab === 'label') refreshLabelView();
 if (currentTab === 'verzonden') refreshVerzondenView();
-}).catch(function(e) { console.error('refreshTrunkrsStatuses:', e.message); });
+if (btn) { btn.disabled = false; btn.textContent = __origLabel; }
+}).catch(function(e) {
+console.error('refreshTrunkrsStatuses:', e.message);
+if (btn) { btn.disabled = false; btn.textContent = __origLabel; }
+});
 }
 
 function formatLabelDateTime(iso) {
