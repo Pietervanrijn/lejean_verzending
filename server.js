@@ -1147,7 +1147,16 @@ return res.status(409).json({ error: 'Voor deze order wordt al een Trunkrs-label
 }
 labelCreationInFlight.add(inFlightKey);
 try {
-const orderRes = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + orderId + '.json', { headers: apiHeaders() });
+// Order + producten tegelijk opvragen i.p.v. na elkaar (was tot
+// 2026-10-26 2 losse, na elkaar afgewachte Lightspeed-aanroepen - zie de
+// toelichting bij SYNC_RESPONSE_BUDGET_MS hieronder voor de aanleiding).
+// Kost in het zeldzame geval dat de carrier-check hieronder alsnog
+// blokkeert 1 nutteloze producten-aanroep, maar dat ruim goedgemaakt door
+// de tijd die dit scheelt op het normale (succesvolle) pad.
+const [orderRes, productsRes] = await Promise.all([
+axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + orderId + '.json', { headers: apiHeaders() }),
+axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + orderId + '/products.json', { headers: apiHeaders() })
+]);
 let order = orderRes.data.order;
 if (!order) return res.status(404).json({ error: 'Order niet gevonden' });
 // Past een eventuele lokale correctie (potlood-icoon, Inkomend-tabblad) toe
@@ -1204,7 +1213,6 @@ lightspeedSyncError: null
 return;
 }
 
-const productsRes = await axios.get('https://api.webshopapp.com/' + SHOP + '/orders/' + orderId + '/products.json', { headers: apiHeaders() });
 const products = productsRes.data.orderProducts || productsRes.data.products || [];
 
 const autoService = bepaalTrunkrsService(products);
@@ -1251,7 +1259,32 @@ saveTrunkrsLabels(trunkrsLabelsStore);
 orderStatusStore[orderKey] = 'label';
 saveOrderStatus(orderStatusStore);
 
-const lightspeedSync = await syncTrunkrsToLightspeed(orderId, shipment.trunkrsNr);
+// Was hiervoor altijd volledig afgewacht (await) - 2 extra, na elkaar
+// uitgevoerde Lightspeed-aanroepen (GET shipments + PUT shipment) terwijl
+// het Trunkrs-label zelf allang klaar is. Dat was altijd al traag (dit is
+// geen nieuwe aanroep), maar werd pas voor Pieter merkbaar nadat PR #74
+// (14-10-2026, dubbele-scan-race-fix) de automatische labelaanmaak in
+// Pack & Go van "fire-and-forget" naar "await" veranderde - de operator
+// wacht nu écht op deze hele keten i.p.v. dat de UI al verderging terwijl
+// dit op de achtergrond nog liep. Daarom hier een tijdsbudget: ronden de
+// 2 Lightspeed-aanroepen binnen SYNC_RESPONSE_BUDGET_MS af, dan gaat het
+// echte resultaat (incl. eventuele foutmelding) gewoon mee in de respons
+// zoals voorheen; duurt het langer, dan antwoordt deze route alvast en
+// loopt de sync op de achtergrond door (met een foutmelding in de
+// serverlog als die alsnog mislukt) - de operator hoeft daar niet meer op
+// te wachten.
+const SYNC_RESPONSE_BUDGET_MS = 2000;
+let syncSettledInTime = false;
+const syncPromise = syncTrunkrsToLightspeed(orderId, shipment.trunkrsNr).then(function(r) { syncSettledInTime = true; return r; });
+const lightspeedSync = await Promise.race([
+syncPromise,
+new Promise(function(resolve) { setTimeout(function() { resolve({ ok: true, pending: true }); }, SYNC_RESPONSE_BUDGET_MS); })
+]);
+if (!syncSettledInTime) {
+syncPromise.then(function(r) {
+if (!r.ok) console.error('syncTrunkrsToLightspeed (op de achtergrond, na time-out) mislukt voor order ' + orderId + ':', r.error);
+});
+}
 
 res.json({
 ok: true,
