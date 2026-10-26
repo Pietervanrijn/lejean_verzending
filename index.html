@@ -739,6 +739,39 @@ applyFilter();
 // stilletjes alle aangevinkte checkboxes wissen terwijl een medewerker net
 // bezig is orders te selecteren voor pakbonnen - daarom onthoudt deze functie
 // welke orders aangevinkt stonden en zet dat na het herladen weer terug.
+// Bescherming tegen een race tussen het printen van een label en de
+// automatische ververscyclus (AUTO_REFRESH_MS, elke 60s) / "Statussen
+// verversen": het printen van een label (sendLabelDirectToStation/
+// markPrintedAndOpen) is zelf 2 stappen - eerst de printjob aanmaken
+// (/api/print-stations/:id/print-label, incl. het ophalen+roteren van de
+// PDF bij Trunkrs, dat zelf al 1-2s kan duren), en ALLEEN bij succes
+// daarna /api/trunkrs/mark-printed aanroepen om "geprint door" vast te
+// leggen. Komt de automatische /api/orders-ververscyclus precies in dat
+// paar seconden ertussen binnen, dan leest de server trunkrsLabelsStore
+// nog van VOOR mark-printed geland is - "geprint door" is dan nog steeds
+// null in die ene verversing, en omdat loadOrders() allOrders in z'n
+// geheel vervangt, overschrijft dat de net gezette naam weer met "nog niet
+// geprint" totdat de VOLGENDE ververscyclus (weer 60s later) de inmiddels
+// wel bijgewerkte server-data ophaalt. Gemeld door Pieter (2026-10-26):
+// sommige labels tonen "nog niet geprint" terwijl ze wel echt geprint zijn.
+// Deze helper behoudt een al lokaal bekende printedBy/printedAt als de
+// vers ophaalde data die (nog) niet heeft, zodat dit nooit meer terug kan
+// springen naar "nog niet geprint". Wordt ook gebruikt door
+// refreshTrunkrsStatuses() hieronder, waar dezelfde race kan optreden.
+function preserveLocalPrintedBy(oldOrders, newOrders) {
+var oldByNum = {};
+(oldOrders || []).forEach(function(o) {
+if (o && o._trunkrsLabel && o._trunkrsLabel.printedBy) oldByNum[String(o.number)] = o._trunkrsLabel;
+});
+(newOrders || []).forEach(function(o) {
+var oldLabel = o && oldByNum[String(o.number)];
+if (oldLabel && o._trunkrsLabel && !o._trunkrsLabel.printedBy) {
+o._trunkrsLabel.printedBy = oldLabel.printedBy;
+o._trunkrsLabel.printedAt = oldLabel.printedAt;
+}
+});
+}
+
 var isLoadingOrders = false;
 async function loadOrders() {
 if (isLoadingOrders) return;
@@ -751,7 +784,9 @@ try {
 var res = await fetch('/api/orders');
 if (!res.ok) throw new Error('Server error: ' + res.status);
 var data = await res.json();
-allOrders = data.orders || [];
+var freshOrders = data.orders || [];
+preserveLocalPrintedBy(allOrders, freshOrders);
+allOrders = freshOrders;
 allOrders.sort(function(a, b) { var na = parseFloat(a._ordNummer || a.number || a.id || 0); var nb = parseFloat(b._ordNummer || b.number || b.id || 0); if (!isNaN(na) && !isNaN(nb)) return nb - na; return String(b._ordNummer || b.number || b.id || '').localeCompare(String(a._ordNummer || a.number || a.id || '')); });
 allMethods = computeSortedMethods(allOrders);
 populateFilter(allMethods);
@@ -2921,7 +2956,18 @@ var statuses = data.orderStatus || {};
 // o._ordNummer (bv. "ORD80384") - anders mist deze lookup alles.
 allOrders.forEach(function(o) {
 var key = String(o.number);
-if (labels[key]) o._trunkrsLabel = labels[key];
+if (labels[key]) {
+// Zelfde race als preserveLocalPrintedBy (zie loadOrders hierboven)
+// bestrijdt: deze verversing kan een momentopname van vóór een net
+// voltooide mark-printed-aanroep ophalen en zo "geprint door" terug
+// naar "nog niet geprint" zetten - behoud daarom een al lokaal bekende
+// printedBy/printedAt als de vers ophaalde data die (nog) niet heeft.
+if (o._trunkrsLabel && o._trunkrsLabel.printedBy && !labels[key].printedBy) {
+labels[key].printedBy = o._trunkrsLabel.printedBy;
+labels[key].printedAt = o._trunkrsLabel.printedAt;
+}
+o._trunkrsLabel = labels[key];
+}
 // Kan de order automatisch van "Gecreëerde labels" naar "Verzonden"
 // verplaatsen (zie server: eerste warehouse-scan bij Trunkrs) - zonder
 // een volledige paginaherlading.
