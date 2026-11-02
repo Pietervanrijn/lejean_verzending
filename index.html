@@ -1213,10 +1213,16 @@ return parseInt(m[1], 10) >= 17;
 // Postcode-prefixes (eerste 3 cijfers) in Vlaanderen waar Trunkrs niet kan bezorgen.
 var BE_TRUNKRS_EXCLUDED_PREFIXES = ['843','862','860','865','867','866','863','869','864','897','895','851','855','858','969','960','968','966','154','157','167','175','340','332','337','336','305','304','156','164','387','389','379'];
 
+// Specifieke postcodes die ondanks het algemene uitgesloten bereik hieronder (bv. heel Wallonie,
+// 1300-1499) in de praktijk wel door Trunkrs bezorgd worden - op verzoek van Pieter toegevoegd
+// (02-11-2026): 1370 (Jodoigne) wordt wel geleverd.
+var BE_TRUNKRS_INCLUDED_EXCEPTIONS = ['1370'];
+
 function isExcludedBelgianPostcode(pc) {
 if (!pc) return false;
 var m = String(pc).trim().match(/^(\d{4})/);
 if (!m) return false;
+if (BE_TRUNKRS_INCLUDED_EXCEPTIONS.indexOf(m[1]) !== -1) return false;
 var n = parseInt(m[1], 10);
 var prefix3 = m[1].slice(0, 3);
 if (BE_TRUNKRS_EXCLUDED_PREFIXES.indexOf(prefix3) !== -1) return true;
