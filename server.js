@@ -486,6 +486,34 @@ function savePrintJobs(data) {
 }
 let printJobsStore = loadPrintJobs();
 
+// Eenmalige opschoning bij opstarten (02-11-2026, n.a.v. een door Pieter
+// aangeleverd scan-logje met [timing]-regels uit PR #77): een printjob-record
+// draagt de volledige base64-PDF mee in `content` (nodig zolang de print-agent
+// 'm nog moet ophalen), maar die bleef tot nu toe voor altijd in dit bestand
+// staan, ook voor allang afgeleverde/afgeronde jobs - er was geen opschoning.
+// Doordat print-jobs.json bij elke stap in de printjob-cyclus (aanmaken,
+// ophalen door de print-agent, ack) in zijn geheel synchroon wordt
+// weggeschreven, werd die schrijfactie met duizenden opgestapelde PDF's erin
+// steeds trager. Uit het timinglogje bleek het daadwerkelijke printen
+// (SumatraPDF, execFile) gemiddeld maar ~365ms te duren, terwijl de hele
+// job-afhandeling gemiddeld ~3,2s kostte - de ontbrekende ~2,8s paste precies
+// bij deze onnodig meegesleepte PDF-inhoud. Deze opschoning verwijdert de
+// content eenmalig met terugwerkende kracht uit alle al afgeleverde/
+// afgeronde jobs; de GET /jobs- en /ack-routes hieronder doen dit voortaan
+// doorlopend zodra een job die content niet meer nodig heeft.
+(function cleanupOldPrintJobContent() {
+  let changed = false;
+  Object.keys(printJobsStore).forEach(function(jobId) {
+    const j = printJobsStore[jobId];
+    if (j && j.status !== 'pending' && (j.content != null || j.zpl != null)) {
+      delete j.content;
+      delete j.zpl;
+      changed = true;
+    }
+  });
+  if (changed) savePrintJobs(printJobsStore);
+})();
+
 // Zoekt het station dat bij dit Bearer-token hoort. Losse, lichte check t.o.v.
 // de kantoor-Basic-Auth hierboven - een print-agent-token mag alleen zijn
 // eigen printjobs ophalen/afvinken, verder niets in de app.
@@ -2139,9 +2167,15 @@ app.get('/api/print-agent/jobs', requirePrintAgentToken, (req, res) => {
   const jobs = Object.keys(printJobsStore)
     .map(function(id) { return printJobsStore[id]; })
     .filter(function(j) { return j.stationId === station.id && j.status === 'pending'; });
-  jobs.forEach(function(j) { j.status = 'delivered'; j.deliveredAt = new Date().toISOString(); });
+  // Content (de base64-PDF) wordt hier nog gelezen voor de response, maar is
+  // daarna niet meer nodig - de print-agent heeft 'm vanaf nu zelf. Door 'm
+  // direct uit het opgeslagen record te verwijderen blijft print-jobs.json
+  // klein en blijft de synchrone save hieronder (en bij de ack hierna) snel,
+  // ook na maanden gebruik (zie de opschoning bij opstarten hierboven).
+  const responseJobs = jobs.map(function(j) { return { id: j.id, orderNumber: j.orderNumber, type: j.type || 'label', content: j.content != null ? j.content : j.zpl, createdAt: j.createdAt }; });
+  jobs.forEach(function(j) { j.status = 'delivered'; j.deliveredAt = new Date().toISOString(); delete j.content; delete j.zpl; });
   if (jobs.length) savePrintJobs(printJobsStore);
-  res.json({ jobs: jobs.map(function(j) { return { id: j.id, orderNumber: j.orderNumber, type: j.type || 'label', content: j.content != null ? j.content : j.zpl, createdAt: j.createdAt }; }) });
+  res.json({ jobs: responseJobs });
 });
 
 // Ontvangt de door de print-agent gedetecteerde Windows-printers (zie
@@ -2169,6 +2203,12 @@ app.post('/api/print-agent/jobs/:jobId/ack', requirePrintAgentToken, (req, res) 
   job.status = ok ? 'done' : 'failed';
   job.doneAt = new Date().toISOString();
   job.error = ok ? null : (error || 'Onbekende fout');
+  // Defensieve opruiming (zie de opschoning bij opstarten hierboven): content
+  // hoort hier normaal al weg te zijn (verwijderd bij het ophalen in GET
+  // /jobs), maar voor de zekerheid ook hier - zodat deze route nooit per
+  // ongeluk weer PDF-inhoud permanent laat staan.
+  delete job.content;
+  delete job.zpl;
   savePrintJobs(printJobsStore);
   res.json({ ok: true });
 });
