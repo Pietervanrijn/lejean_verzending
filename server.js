@@ -2103,6 +2103,23 @@ app.post('/api/print-stations/:id/print-label', async (req, res) => {
 // Hergebruikt bewust de bestaande, al werkende pakbon-layout/-opmaak in
 // plaats van die server-side opnieuw op te bouwen - puppeteer rendert exact
 // dezelfde HTML/CSS/JS (incl. de JsBarcode-barcode) als de browser zou doen.
+//
+// Splitst de gerenderde PDF voortaan op in 1 printjob per pakbon(-pagina)
+// i.p.v. 1 printjob voor de hele geselecteerde batch (gevonden n.a.v. Pieters
+// melding, 09-11-2026: bij een grote selectie - bv. 59 pakbonnen in 1x -
+// toonde de app wel "pakbon geprint", maar kwamen in werkelijkheid niet alle
+// pakbonnen uit de printer). Oorzaak: printPdfOnPrinter() in
+// buildPrintAgentScript roept SumatraPDF aan met een harde timeout van 30s
+// per printopdracht; bij 1 job met alle pagina's samen kan het fysiek printen
+// van zo'n grote batch die 30s overschrijden, waarna Node het SumatraPDF-
+// proces midden in de opdracht afbreekt - de pagina's die de printer al had
+// ontvangen komen er nog wel uit, de rest nooit meer. De app had de status
+// op dat moment allang op "pakbon geprint" gezet (dat gebeurt zodra de
+// printjob is aangemaakt, niet pas als 'm echt geprint is), dus niets wees
+// hier ooit op. Door elke pakbon als eigen printjob te versturen - exact
+// zoals een verzendlabel al werkt - blijft elke afzonderlijke SumatraPDF-
+// aanroep ruim binnen de 30s, ongeacht hoe groot de selectie is, en raakt een
+// eventuele printerhapering voortaan hoogstens 1 pakbon i.p.v. de hele batch.
 app.post('/api/print-stations/:id/print-pakbon', async (req, res) => {
   const station = printStationsStore[req.params.id];
   if (!station) return res.status(404).json({ error: 'Station niet gevonden.' });
@@ -2110,21 +2127,66 @@ app.post('/api/print-stations/:id/print-pakbon', async (req, res) => {
   if (!html || typeof html !== 'string') return res.status(400).json({ error: 'Geen pakbon-HTML meegegeven.' });
   try {
     const pdfBuffer = await renderHtmlToPdf(html);
-    const jobId = crypto.randomUUID();
-    printJobsStore[jobId] = {
-      id: jobId,
-      stationId: station.id,
-      orderNumber: Array.isArray(orderNumbers) ? orderNumbers.map(bareOrderNumberKey).join(',') : '',
-      type: 'pakbon',
-      content: pdfBuffer.toString('base64'),
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      deliveredAt: null,
-      doneAt: null,
-      error: null
-    };
+    const nums = Array.isArray(orderNumbers) ? orderNumbers : [];
+    // Elke pakbon staat als eigen pagina in de gerenderde PDF (zie
+    // buildPakbonHtml/buildPakbonPrintHtml in index.html: 1 ".pakbon-page"-
+    // div per order, met page-break-after ertussen) - dus evenveel pagina's
+    // als geselecteerde orders. Alleen opsplitsen als dat aantal ook echt
+    // klopt; komt dat onverhoopt niet overeen, dan liever terugvallen op 1
+    // job voor de hele batch (het oude gedrag) dan een pakbon per ongeluk aan
+    // de verkeerde order toewijzen.
+    let perPageBuffers = null;
+    try {
+      const srcDoc = await PDFDocument.load(pdfBuffer);
+      const pageCount = srcDoc.getPageCount();
+      if (pageCount > 0 && pageCount === nums.length) {
+        perPageBuffers = [];
+        for (let i = 0; i < pageCount; i++) {
+          const pageDoc = await PDFDocument.create();
+          const [copiedPage] = await pageDoc.copyPages(srcDoc, [i]);
+          pageDoc.addPage(copiedPage);
+          perPageBuffers.push(Buffer.from(await pageDoc.save()));
+        }
+      }
+    } catch (splitErr) {
+      console.error('print-pakbon: PDF opsplitsen per pagina mislukt, valt terug op 1 printjob voor de hele batch:', splitErr.message);
+    }
+    const jobIds = [];
+    if (perPageBuffers) {
+      perPageBuffers.forEach(function(buf, i) {
+        const jobId = crypto.randomUUID();
+        printJobsStore[jobId] = {
+          id: jobId,
+          stationId: station.id,
+          orderNumber: bareOrderNumberKey(nums[i]),
+          type: 'pakbon',
+          content: buf.toString('base64'),
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          deliveredAt: null,
+          doneAt: null,
+          error: null
+        };
+        jobIds.push(jobId);
+      });
+    } else {
+      const jobId = crypto.randomUUID();
+      printJobsStore[jobId] = {
+        id: jobId,
+        stationId: station.id,
+        orderNumber: nums.map(bareOrderNumberKey).join(','),
+        type: 'pakbon',
+        content: pdfBuffer.toString('base64'),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        deliveredAt: null,
+        doneAt: null,
+        error: null
+      };
+      jobIds.push(jobId);
+    }
     savePrintJobs(printJobsStore);
-    res.json({ ok: true, jobId: jobId });
+    res.json({ ok: true, jobId: jobIds[0], jobIds: jobIds });
   } catch (e) {
     console.error('print-pakbon: PDF-rendering mislukt:', e.message);
     res.status(502).json({ error: 'Pakbon omzetten naar PDF mislukt: ' + e.message });
